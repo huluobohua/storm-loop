@@ -46,7 +46,7 @@ class CacheService:
             'search': 3600,      # 1 hour for search results
             'paper': 86400,      # 24 hours for paper details
             'author': 43200,     # 12 hours for author info
-            'doi': 604800,       # 1 week for DOI resolution
+            'doi': 172800,       # 48 hours for DOI resolution
             'quality': 86400,    # 24 hours for quality scores
             'trending': 1800,    # 30 minutes for trending papers
             'session': 7200      # 2 hours for session data

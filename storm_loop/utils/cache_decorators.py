@@ -85,8 +85,10 @@ def cached_async(
             try:
                 cache_service = await get_cache_service()
                 if not await cache_service.health_check():
+                    storm_logger.debug(f"Cache unavailable for {func.__name__}: health check failed")
                     return await func(*args, **kwargs)
-            except Exception:
+            except Exception as e:
+                storm_logger.debug(f"Cache unavailable for {func.__name__}: {str(e)}")
                 return await func(*args, **kwargs)
             
             # Generate cache key
@@ -102,8 +104,10 @@ def cached_async(
                 if cached_result is not None:
                     storm_logger.debug(f"Cache hit for {func.__name__}: {cache_key}")
                     return cached_result
+                else:
+                    storm_logger.debug(f"Cache miss for {func.__name__}: {cache_key}")
             except Exception as e:
-                storm_logger.warning(f"Cache get failed: {str(e)}")
+                storm_logger.warning(f"Cache get failed for {func.__name__}: {str(e)}")
             
             # Execute function
             try:
@@ -124,7 +128,11 @@ def cached_async(
                         await cache_service.set(cache_key, result, ttl)
                         storm_logger.debug(f"Cached result for {func.__name__}: {cache_key}")
                     except Exception as e:
-                        storm_logger.warning(f"Cache set failed: {str(e)}")
+                        storm_logger.warning(f"Cache set failed for {func.__name__}: {str(e)}")
+                elif not should_cache:
+                    storm_logger.debug(f"Cache skipped for {func.__name__}: condition not met")
+                elif result is None:
+                    storm_logger.debug(f"Cache skipped for {func.__name__}: result is None")
                 
                 return result
                 
@@ -206,7 +214,7 @@ def cache_paper_details(ttl: int = 86400):
     )
 
 
-def cache_doi_resolution(ttl: int = 604800):  # 1 week
+def cache_doi_resolution(ttl: int = 172800):  # 48 hours
     """Decorator for caching DOI resolution with normalized DOI"""
     def cache_condition(result):
         # Cache both successful and failed DOI resolutions
