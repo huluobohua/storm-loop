@@ -39,8 +39,6 @@ class AcademicSourceService:
         self.crossref_client = None
         self.quality_scorer = SourceQualityScorer()
         
-        # Cache configuration
-        self._cache_ttl = self.config.cache_ttl
     
     async def __aenter__(self):
         if self._own_session:

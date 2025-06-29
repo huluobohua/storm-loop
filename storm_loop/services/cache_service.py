@@ -65,9 +65,9 @@ class CacheService:
                     port=self.config.redis_port,
                     db=self.config.redis_db,
                     password=self.config.redis_password,
-                    max_connections=20,
+                    max_connections=self.config.redis_max_connections,
                     retry_on_timeout=True,
-                    health_check_interval=30
+                    health_check_interval=self.config.redis_health_check_interval
                 )
                 
                 self._redis_client = redis.Redis(
@@ -102,17 +102,37 @@ class CacheService:
         await self.disconnect()
     
     def _generate_cache_key(self, prefix: str, identifier: str, **kwargs) -> str:
-        """Generate standardized cache key with optional parameters"""
-        base_key = f"{self.KEY_PREFIXES.get(prefix, prefix)}{identifier}"
+        """Generate standardized cache key with optional parameters and size limits"""
+        # Sanitize identifier to remove dangerous characters
+        safe_identifier = self._sanitize_cache_key_component(identifier)
+        base_key = f"{self.KEY_PREFIXES.get(prefix, prefix)}{safe_identifier}"
         
         if kwargs:
             # Sort kwargs for consistent key generation
             sorted_params = sorted(kwargs.items())
-            params_str = json.dumps(sorted_params, sort_keys=True)
+            params_str = json.dumps(sorted_params, sort_keys=True, default=str)
             param_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
             base_key += f":{param_hash}"
         
+        # Enforce key size limit
+        if len(base_key.encode('utf-8')) > self.config.cache_max_key_size:
+            # Use hash for very long keys
+            key_hash = hashlib.sha256(base_key.encode('utf-8')).hexdigest()
+            base_key = f"{self.KEY_PREFIXES.get(prefix, prefix)}hash:{key_hash[:32]}"
+        
         return base_key
+    
+    def _sanitize_cache_key_component(self, component: str) -> str:
+        """Sanitize cache key component to remove dangerous characters"""
+        if not component:
+            return "empty"
+        
+        # Remove or replace dangerous characters
+        safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:"
+        sanitized = ''.join(c if c in safe_chars else '_' for c in component)
+        
+        # Ensure key component isn't empty after sanitization
+        return sanitized if sanitized else "sanitized"
     
     def _serialize_data(self, data: Any) -> bytes:
         """Serialize data for Redis storage"""
@@ -155,27 +175,35 @@ class CacheService:
             return result
             
         except Exception as e:
-            storm_logger.warning(f"Cache get failed for key {key}: {str(e)}")
+            storm_logger.error(f"Cache get failed for key {key}: {str(e)}")
             return None
     
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
-        """Set value in cache with optional TTL"""
+        """Set value in cache with optional TTL and size limits"""
         if not self._is_connected:
             return False
         
         try:
             serialized_data = self._serialize_data(value)
             
+            # Check value size limit
+            if len(serialized_data) > self.config.cache_max_value_size:
+                storm_logger.warning(
+                    f"Cache value too large for key {key}: {len(serialized_data)} bytes "
+                    f"(max: {self.config.cache_max_value_size})"
+                )
+                return False
+            
             if ttl is not None:
                 result = await self._redis_client.setex(key, ttl, serialized_data)
             else:
                 result = await self._redis_client.set(key, serialized_data)
             
-            storm_logger.debug(f"Cache set: {key} (TTL: {ttl})")
+            storm_logger.debug(f"Cache set: {key} (TTL: {ttl}, Size: {len(serialized_data)} bytes)")
             return bool(result)
             
         except Exception as e:
-            storm_logger.warning(f"Cache set failed for key {key}: {str(e)}")
+            storm_logger.error(f"Cache set failed for key {key}: {str(e)}")
             return False
     
     async def delete(self, key: str) -> bool:
@@ -281,17 +309,33 @@ class CacheService:
         return await self.get(cache_key)
     
     async def invalidate_pattern(self, pattern: str) -> int:
-        """Invalidate all keys matching a pattern"""
+        """Invalidate all keys matching a pattern using SCAN for production safety"""
         if not self._is_connected:
             return 0
         
         try:
-            keys = await self._redis_client.keys(pattern)
-            if keys:
-                count = await self._redis_client.delete(*keys)
-                storm_logger.info(f"Invalidated {count} cache keys matching pattern: {pattern}")
-                return count
-            return 0
+            count = 0
+            batch_size = self.config.cache_scan_batch_size
+            keys_to_delete = []
+            
+            # Use SCAN instead of KEYS for production safety
+            async for key in self._redis_client.scan_iter(match=pattern, count=batch_size):
+                keys_to_delete.append(key)
+                
+                # Delete in batches to avoid memory issues
+                if len(keys_to_delete) >= batch_size:
+                    deleted = await self._redis_client.delete(*keys_to_delete)
+                    count += deleted
+                    keys_to_delete.clear()
+            
+            # Delete remaining keys
+            if keys_to_delete:
+                deleted = await self._redis_client.delete(*keys_to_delete)
+                count += deleted
+            
+            storm_logger.info(f"Invalidated {count} cache keys matching pattern: {pattern}")
+            return count
+            
         except Exception as e:
             storm_logger.warning(f"Cache pattern invalidation failed for pattern {pattern}: {str(e)}")
             return 0
@@ -370,25 +414,45 @@ class CacheService:
             return False
 
 
-# Global cache service instance
-_cache_service = None
+class CacheServiceManager:
+    """Thread-safe singleton manager for cache service"""
+    
+    _instance: Optional[CacheService] = None
+    _lock = asyncio.Lock()
+    _initialized = False
+    
+    @classmethod
+    async def get_instance(cls) -> CacheService:
+        """Get cache service instance with thread-safe initialization"""
+        if cls._instance is None or not cls._initialized:
+            async with cls._lock:
+                if cls._instance is None or not cls._initialized:
+                    cls._instance = CacheService()
+                    await cls._instance.connect()
+                    cls._initialized = True
+        
+        return cls._instance
+    
+    @classmethod
+    async def close_instance(cls) -> None:
+        """Close cache service instance"""
+        async with cls._lock:
+            if cls._instance and cls._initialized:
+                await cls._instance.disconnect()
+                cls._instance = None
+                cls._initialized = False
+    
+    @classmethod
+    async def reset_for_testing(cls) -> None:
+        """Reset instance for testing purposes"""
+        await cls.close_instance()
 
 
 async def get_cache_service() -> CacheService:
     """Get global cache service instance"""
-    global _cache_service
-    
-    if _cache_service is None:
-        _cache_service = CacheService()
-        await _cache_service.connect()
-    
-    return _cache_service
+    return await CacheServiceManager.get_instance()
 
 
 async def close_cache_service() -> None:
     """Close global cache service"""
-    global _cache_service
-    
-    if _cache_service:
-        await _cache_service.disconnect()
-        _cache_service = None
+    await CacheServiceManager.close_instance()

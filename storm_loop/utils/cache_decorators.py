@@ -13,15 +13,48 @@ from storm_loop.utils.logging import storm_logger
 
 
 def cache_key_generator(*args, **kwargs) -> str:
-    """Generate cache key from function arguments"""
-    # Create a stable key from arguments
+    """Generate cache key from function arguments with efficient handling"""
+    # Create a stable key from arguments, avoiding expensive string conversion
     key_data = {
-        'args': [str(arg) for arg in args if not callable(arg)],  # Exclude self/cls
-        'kwargs': {k: str(v) for k, v in kwargs.items() if not callable(v)}
+        'args': [_safe_arg_repr(arg) for arg in args if not callable(arg)],  # Exclude self/cls
+        'kwargs': {k: _safe_arg_repr(v) for k, v in kwargs.items() if not callable(v)}
     }
     
-    key_str = json.dumps(key_data, sort_keys=True)
+    key_str = json.dumps(key_data, sort_keys=True, default=str)
     return hashlib.md5(key_str.encode()).hexdigest()
+
+
+def _safe_arg_repr(arg: Any) -> str:
+    """Safely represent an argument for caching without expensive conversions"""
+    # Handle common types efficiently
+    if isinstance(arg, (str, int, float, bool)):
+        return str(arg)
+    elif isinstance(arg, (list, tuple)) and len(arg) < 10:
+        return str(arg)
+    elif hasattr(arg, 'id'):  # Objects with ID attribute
+        return f"{type(arg).__name__}:{arg.id}"
+    elif hasattr(arg, '__dict__') and len(arg.__dict__) < 5:
+        return f"{type(arg).__name__}:{hash(frozenset(arg.__dict__.items()) if arg.__dict__ else ())}"
+    else:
+        # For complex objects, use type and id
+        return f"{type(arg).__name__}:{id(arg)}"
+
+
+def _normalize_doi(doi: str) -> str:
+    """Normalize DOI format for consistent caching"""
+    if not doi or doi == 'unknown':
+        return doi
+    
+    # Remove common prefixes and normalize
+    doi = doi.lower().strip()
+    if doi.startswith('https://doi.org/'):
+        doi = doi[16:]
+    elif doi.startswith('http://dx.doi.org/'):
+        doi = doi[18:]
+    elif doi.startswith('doi:'):
+        doi = doi[4:]
+    
+    return doi
 
 
 def cached_async(
@@ -29,7 +62,8 @@ def cached_async(
     ttl: Optional[int] = None,
     key_generator: Optional[Callable] = None,
     cache_condition: Optional[Callable] = None,
-    invalidate_on_error: bool = False
+    invalidate_on_error: bool = False,
+    timeout: Optional[float] = None
 ):
     """
     Async caching decorator for functions
@@ -151,14 +185,16 @@ def cache_paper_details(ttl: int = 86400):
 
 
 def cache_doi_resolution(ttl: int = 604800):  # 1 week
-    """Decorator for caching DOI resolution"""
+    """Decorator for caching DOI resolution with normalized DOI"""
     def cache_condition(result):
         # Cache both successful and failed DOI resolutions
         return True
     
     def key_generator(*args, **kwargs):
         doi = kwargs.get('doi', args[1] if len(args) > 1 else 'unknown')
-        return f"doi_resolution:{doi}"
+        # Normalize DOI format
+        normalized_doi = _normalize_doi(doi)
+        return f"doi_resolution:{normalized_doi}"
     
     return cached_async(
         prefix="doi",

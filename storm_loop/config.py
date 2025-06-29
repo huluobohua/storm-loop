@@ -4,11 +4,7 @@ Configuration management for STORM-Loop
 import os
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
-try:
-    from pydantic_settings import BaseSettings
-except ImportError:
-    # Fallback for older pydantic versions
-    from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from enum import Enum
 
 
@@ -30,10 +26,17 @@ class STORMLoopConfig(BaseSettings):
     perplexity_api_key: Optional[str] = Field(default=None, env="PERPLEXITY_API_KEY")
     
     # Redis Configuration
-    redis_host: str = Field(default="localhost", env="REDIS_HOST")
-    redis_port: int = Field(default=6379, env="REDIS_PORT")
-    redis_db: int = Field(default=0, env="REDIS_DB")
-    redis_password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
+    redis_host: str = Field(default="localhost", env="REDIS_HOST", description="Redis server host")
+    redis_port: int = Field(default=6379, env="REDIS_PORT", description="Redis server port")
+    redis_db: int = Field(default=0, env="REDIS_DB", description="Redis database number")
+    redis_password: Optional[str] = Field(default=None, env="REDIS_PASSWORD", description="Redis password")
+    redis_max_connections: int = Field(default=20, env="REDIS_MAX_CONNECTIONS", description="Max Redis connections")
+    redis_health_check_interval: int = Field(default=30, env="REDIS_HEALTH_CHECK_INTERVAL", description="Health check interval in seconds")
+    
+    # Cache Configuration
+    cache_max_key_size: int = Field(default=1024, description="Maximum cache key size in bytes")
+    cache_max_value_size: int = Field(default=1048576, description="Maximum cache value size in bytes (1MB)")
+    cache_scan_batch_size: int = Field(default=100, description="Batch size for Redis SCAN operations")
     
     # Academic APIs
     enable_openalex: bool = Field(default=True, description="Enable OpenAlex integration")
