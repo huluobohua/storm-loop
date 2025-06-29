@@ -3,7 +3,12 @@ Configuration management for STORM-Loop
 """
 import os
 from typing import Dict, Any, Optional
-from pydantic import BaseSettings, Field
+from pydantic import BaseModel, Field
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Fallback for older pydantic versions
+    from pydantic import BaseSettings
 from enum import Enum
 
 

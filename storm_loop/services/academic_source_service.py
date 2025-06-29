@@ -14,6 +14,10 @@ from storm_loop.models.academic_models import (
 from storm_loop.services.openalex_client import OpenAlexClient
 from storm_loop.services.crossref_client import CrossrefClient
 from storm_loop.services.source_quality_scorer import SourceQualityScorer
+from storm_loop.utils.cache_decorators import (
+    cache_academic_search, cache_paper_details, cache_doi_resolution,
+    cache_quality_score, cache_author_search, cache_trending_papers
+)
 from storm_loop.utils.logging import storm_logger
 
 
@@ -35,8 +39,7 @@ class AcademicSourceService:
         self.crossref_client = None
         self.quality_scorer = SourceQualityScorer()
         
-        # Caching (simple in-memory cache for demo)
-        self._cache: Dict[str, Tuple[datetime, Any]] = {}
+        # Cache configuration
         self._cache_ttl = self.config.cache_ttl
     
     async def __aenter__(self):
@@ -61,28 +64,8 @@ class AcademicSourceService:
         if self._own_session and self.session:
             await self.session.close()
     
-    def _get_cache_key(self, method: str, **kwargs) -> str:
-        """Generate cache key for method and parameters"""
-        key_data = f"{method}:{str(sorted(kwargs.items()))}"
-        return hashlib.md5(key_data.encode()).hexdigest()
     
-    def _get_from_cache(self, cache_key: str) -> Optional[Any]:
-        """Get result from cache if valid"""
-        if cache_key in self._cache:
-            cached_time, cached_result = self._cache[cache_key]
-            if (datetime.now() - cached_time).total_seconds() < self._cache_ttl:
-                storm_logger.debug(f"Cache hit for key: {cache_key}")
-                return cached_result
-            else:
-                # Remove expired entry
-                del self._cache[cache_key]
-        return None
-    
-    def _set_cache(self, cache_key: str, result: Any) -> None:
-        """Store result in cache"""
-        self._cache[cache_key] = (datetime.now(), result)
-        storm_logger.debug(f"Cached result for key: {cache_key}")
-    
+    @cache_academic_search(ttl=3600)
     async def search_papers(
         self,
         query: str,
@@ -106,19 +89,6 @@ class AcademicSourceService:
         Returns:
             SearchResult with ranked, quality-scored papers
         """
-        # Cache key for this search
-        cache_key = self._get_cache_key(
-            "search_papers", 
-            query=query, 
-            limit=limit, 
-            sources=sources,
-            **search_kwargs
-        )
-        
-        # Check cache first
-        cached_result = self._get_from_cache(cache_key)
-        if cached_result:
-            return cached_result
         
         # Determine which sources to use
         if sources is None:
@@ -177,8 +147,6 @@ class AcademicSourceService:
                 source="academic_source_service"
             )
             
-            # Cache result
-            self._set_cache(cache_key, result)
             
             storm_logger.info(f"Search completed: {len(all_papers)} papers returned")
             return result
@@ -304,14 +272,11 @@ class AcademicSourceService:
         papers.sort(key=paper_score, reverse=True)
         return papers
     
+    @cache_doi_resolution(ttl=604800)
     async def get_paper_by_doi(self, doi: str) -> Optional[AcademicPaper]:
         """
         Get a paper by DOI, trying multiple sources
         """
-        cache_key = self._get_cache_key("get_paper_by_doi", doi=doi)
-        cached_result = self._get_from_cache(cache_key)
-        if cached_result:
-            return cached_result
         
         storm_logger.debug(f"Looking up paper by DOI: {doi}")
         
@@ -322,7 +287,6 @@ class AcademicSourceService:
                 if paper:
                     metrics = self.quality_scorer.score_paper(paper)
                     paper.quality_score = metrics.overall_score
-                    self._set_cache(cache_key, paper)
                     return paper
             except Exception as e:
                 storm_logger.warning(f"OpenAlex DOI lookup failed: {str(e)}")
@@ -334,7 +298,6 @@ class AcademicSourceService:
                 if paper:
                     metrics = self.quality_scorer.score_paper(paper)
                     paper.quality_score = metrics.overall_score
-                    self._set_cache(cache_key, paper)
                     return paper
             except Exception as e:
                 storm_logger.warning(f"Crossref DOI lookup failed: {str(e)}")
@@ -351,6 +314,7 @@ class AcademicSourceService:
             return paper is not None
         return False
     
+    @cache_author_search(ttl=43200)
     async def search_by_author(self, author_name: str, limit: int = 10) -> SearchResult:
         """Search papers by author across sources"""
         return await self.search_papers(
@@ -359,6 +323,7 @@ class AcademicSourceService:
             sources=['openalex', 'crossref']
         )
     
+    @cache_trending_papers(ttl=1800)
     async def get_trending_papers(self, days: int = 7, limit: int = 10) -> SearchResult:
         """Get trending/recent high-quality papers"""
         # Use OpenAlex for trending as it has better recency data
