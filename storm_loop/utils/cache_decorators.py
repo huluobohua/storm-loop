@@ -5,7 +5,7 @@ import asyncio
 import functools
 import hashlib
 import json
-from typing import Any, Callable, Optional, Dict, Union
+from typing import Any, Callable, Optional, Dict, Union, Awaitable, TypeVar, ParamSpec
 from datetime import datetime
 
 from storm_loop.services.cache_service import get_cache_service
@@ -57,14 +57,17 @@ def _normalize_doi(doi: str) -> str:
     return doi
 
 
+P = ParamSpec('P')
+T = TypeVar('T')
+
 def cached_async(
     prefix: str = "default",
     ttl: Optional[int] = None,
-    key_generator: Optional[Callable] = None,
-    cache_condition: Optional[Callable] = None,
+    key_generator: Optional[Callable[..., str]] = None,
+    cache_condition: Optional[Callable[[Any], bool]] = None,
     invalidate_on_error: bool = False,
     timeout: Optional[float] = None
-):
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """
     Async caching decorator for functions
     
@@ -75,7 +78,7 @@ def cached_async(
         cache_condition: Function to determine if result should be cached
         invalidate_on_error: Whether to invalidate cache on function error
     """
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             # Skip caching if cache service is not available
@@ -109,7 +112,11 @@ def cached_async(
                 # Check caching condition
                 should_cache = True
                 if cache_condition:
-                    should_cache = cache_condition(result)
+                    try:
+                        should_cache = cache_condition(result)
+                    except Exception as e:
+                        storm_logger.warning(f"Cache condition check failed for {func.__name__}: {str(e)}")
+                        should_cache = False  # Don't cache if condition check fails
                 
                 # Cache the result
                 if should_cache and result is not None:
@@ -136,9 +143,17 @@ def cached_async(
 
 def cache_academic_search(ttl: int = 3600):
     """Decorator for caching academic search results"""
-    def cache_condition(result):
-        # Only cache if we have results
-        return hasattr(result, 'papers') and len(result.papers) > 0
+    def cache_condition(result: Any) -> bool:
+        # Only cache if we have results and the result is valid
+        try:
+            return (
+                result is not None and 
+                hasattr(result, 'papers') and 
+                isinstance(result.papers, (list, tuple)) and 
+                len(result.papers) > 0
+            )
+        except (AttributeError, TypeError):
+            return False
     
     def key_generator(*args, **kwargs):
         # Extract query and important parameters for key
@@ -167,9 +182,16 @@ def cache_academic_search(ttl: int = 3600):
 
 def cache_paper_details(ttl: int = 86400):
     """Decorator for caching paper details"""
-    def cache_condition(result):
-        # Only cache successful paper retrievals
-        return result is not None and hasattr(result, 'id')
+    def cache_condition(result: Any) -> bool:
+        # Only cache successful paper retrievals with valid data
+        try:
+            return (
+                result is not None and 
+                hasattr(result, 'id') and 
+                getattr(result, 'id', None) is not None
+            )
+        except (AttributeError, TypeError):
+            return False
     
     def key_generator(*args, **kwargs):
         # Extract paper identifier
@@ -206,9 +228,16 @@ def cache_doi_resolution(ttl: int = 604800):  # 1 week
 
 def cache_quality_score(ttl: int = 86400):
     """Decorator for caching quality scores"""
-    def cache_condition(result):
+    def cache_condition(result: Any) -> bool:
         # Only cache if we have a valid quality metrics object
-        return result is not None and hasattr(result, 'overall_score')
+        try:
+            return (
+                result is not None and 
+                hasattr(result, 'overall_score') and 
+                isinstance(getattr(result, 'overall_score', None), (int, float))
+            )
+        except (AttributeError, TypeError):
+            return False
     
     def key_generator(*args, **kwargs):
         # Extract paper object or ID
@@ -231,8 +260,16 @@ def cache_quality_score(ttl: int = 86400):
 
 def cache_author_search(ttl: int = 43200):  # 12 hours
     """Decorator for caching author search results"""
-    def cache_condition(result):
-        return hasattr(result, 'papers') and len(result.papers) > 0
+    def cache_condition(result: Any) -> bool:
+        try:
+            return (
+                result is not None and 
+                hasattr(result, 'papers') and 
+                isinstance(result.papers, (list, tuple)) and 
+                len(result.papers) > 0
+            )
+        except (AttributeError, TypeError):
+            return False
     
     def key_generator(*args, **kwargs):
         author_name = kwargs.get('author_name', args[1] if len(args) > 1 else 'unknown')
@@ -249,8 +286,16 @@ def cache_author_search(ttl: int = 43200):  # 12 hours
 
 def cache_trending_papers(ttl: int = 1800):  # 30 minutes
     """Decorator for caching trending papers"""
-    def cache_condition(result):
-        return hasattr(result, 'papers') and len(result.papers) > 0
+    def cache_condition(result: Any) -> bool:
+        try:
+            return (
+                result is not None and 
+                hasattr(result, 'papers') and 
+                isinstance(result.papers, (list, tuple)) and 
+                len(result.papers) > 0
+            )
+        except (AttributeError, TypeError):
+            return False
     
     def key_generator(*args, **kwargs):
         days = kwargs.get('days', args[1] if len(args) > 1 else 7)
@@ -341,7 +386,7 @@ class CacheInvalidator:
 
 
 # Convenience function for cache warming
-async def warm_cache_with_popular_searches():
+async def warm_cache_with_popular_searches() -> None:
     """Warm cache with popular/common searches"""
     try:
         cache_service = await get_cache_service()
@@ -369,7 +414,10 @@ async def warm_cache_with_popular_searches():
                 'ttl': 7200  # 2 hours for warm-up data
             })
         
-        await cache_service.warm_up_cache(lambda: asyncio.create_task(asyncio.coroutine(lambda: warm_up_data)()))
+        async def data_provider():
+            return warm_up_data
+        
+        await cache_service.warm_up_cache(data_provider)
         
     except Exception as e:
         storm_logger.warning(f"Cache warm-up failed: {str(e)}")

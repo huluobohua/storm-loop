@@ -5,7 +5,7 @@ import asyncio
 import json
 import pickle
 import hashlib
-from typing import Any, Optional, Union, Dict, List, Callable
+from typing import Any, Optional, Union, Dict, List, Callable, ClassVar
 from datetime import datetime, timedelta
 import redis.asyncio as redis
 from redis.asyncio.connection import ConnectionPool
@@ -417,9 +417,9 @@ class CacheService:
 class CacheServiceManager:
     """Thread-safe singleton manager for cache service"""
     
-    _instance: Optional[CacheService] = None
-    _lock = asyncio.Lock()
-    _initialized = False
+    _instance: ClassVar[Optional[CacheService]] = None
+    _lock: ClassVar[asyncio.Lock] = asyncio.Lock()
+    _initialized: ClassVar[bool] = False
     
     @classmethod
     async def get_instance(cls) -> CacheService:
