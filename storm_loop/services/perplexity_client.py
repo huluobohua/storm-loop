@@ -19,11 +19,18 @@ class PerplexityClient:
         self.session = session
         self._own_session = session is None
         self._request_semaphore = asyncio.Semaphore(self.config.max_concurrent_requests)
+        self._disabled = False
 
     async def __aenter__(self):
         if self._own_session:
             timeout = aiohttp.ClientTimeout(total=self.config.request_timeout)
             self.session = aiohttp.ClientSession(timeout=timeout)
+
+        if not self.api_key:
+            storm_logger.warning(
+                "Perplexity API key not configured, fallback search disabled"
+            )
+            self._disabled = True
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -32,6 +39,10 @@ class PerplexityClient:
 
     async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Search Perplexity for general information."""
+        if self._disabled:
+            storm_logger.debug("Perplexity client disabled; returning empty result")
+            return []
+
         params = {"q": query, "limit": limit}
         headers = {}
         if self.api_key:
@@ -41,11 +52,17 @@ class PerplexityClient:
         async with self._request_semaphore:
             try:
                 async with self.session.get(url, params=params, headers=headers) as resp:
-                    if resp.status == 200:
+                    if 200 <= resp.status < 300:
                         data = await resp.json()
                         return data.get("results", [])
+
                     text = await resp.text()
-                    storm_logger.error(f"Perplexity API error {resp.status}: {text}")
+                    if resp.status == 401:
+                        storm_logger.error("Perplexity API authentication failed")
+                    elif resp.status == 429:
+                        storm_logger.warning("Perplexity API rate limit exceeded")
+                    else:
+                        storm_logger.error(f"Perplexity API error {resp.status}: {text}")
                     raise aiohttp.ClientResponseError(
                         request_info=resp.request_info,
                         history=resp.history,

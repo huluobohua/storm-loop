@@ -104,6 +104,7 @@ Create a `.env` file in the project root:
 # API Keys
 OPENAI_API_KEY=your_openai_api_key
 PERPLEXITY_API_KEY=your_perplexity_api_key
+# Omit to disable Perplexity fallback
 
 # Redis Configuration
 REDIS_HOST=localhost

@@ -344,3 +344,14 @@ class TestAcademicSourceService:
             papers = await service.fallback_search("bad", limit=1)
             assert papers == []
             assert any("Perplexity fallback failed" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_fallback_disabled_without_api_key(self):
+        """Fallback search returns empty list when API key is missing."""
+        async with AcademicSourceService() as service:
+            # Simulate missing API key
+            service.perplexity_client.api_key = None
+            await service.perplexity_client.__aenter__()
+            assert getattr(service.perplexity_client, "_disabled", False)
+            papers = await service.fallback_search("query")
+            assert papers == []

@@ -213,6 +213,9 @@ class AcademicSourceService:
 
     async def fallback_search(self, query: str, limit: int = 5) -> List[AcademicPaper]:
         """Fallback search using Perplexity when academic sources fail."""
+        if getattr(self.perplexity_client, "_disabled", False):
+            storm_logger.debug("Perplexity fallback disabled; skipping search")
+            return []
         try:
             results = await self.perplexity_client.search(query, limit=limit)
             return self._convert_perplexity_to_papers(results)
@@ -221,7 +224,14 @@ class AcademicSourceService:
             return []
 
     def _convert_perplexity_to_papers(self, results: List[Dict[str, Any]]) -> List[AcademicPaper]:
-        """Convert Perplexity search results into AcademicPaper models."""
+        """Convert Perplexity search results into ``AcademicPaper`` models.
+
+        Args:
+            results: Raw result dictionaries returned from the Perplexity API.
+
+        Returns:
+            List of ``AcademicPaper`` instances describing the results.
+        """
         papers: List[AcademicPaper] = []
         for item in results:
             papers.append(
