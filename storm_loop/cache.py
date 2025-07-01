@@ -1,21 +1,79 @@
 import asyncio
 import hashlib
 import json
+import time
+from collections import OrderedDict
 from typing import Any, Dict, Optional
 
 
-class RedisAcademicCache:
-    """Simple Redis-based cache with in-memory fallback."""
+class CacheMetrics:
+    """Simple in-process metrics collector for cache operations."""
 
-    def __init__(self, redis_url: str = "redis://localhost:6379", ttl: int = 3600) -> None:
+    def __init__(self) -> None:
+        self.hits = 0
+        self.misses = 0
+        self.errors = 0
+
+    def record_hit(self) -> None:
+        self.hits += 1
+
+    def record_miss(self) -> None:
+        self.misses += 1
+
+    def record_error(self) -> None:
+        self.errors += 1
+
+    def snapshot(self) -> Dict[str, int]:
+        return {"hits": self.hits, "misses": self.misses, "errors": self.errors}
+
+
+class LRUMemoryCache:
+    """In-memory LRU cache used as a fallback when Redis is unavailable."""
+
+    def __init__(self, capacity: int = 128) -> None:
+        self.capacity = capacity
+        self._store: "OrderedDict[str, tuple[str, Optional[float]]]" = OrderedDict()
+
+    def get(self, key: str) -> Optional[str]:
+        item = self._store.get(key)
+        if not item:
+            return None
+        value, expires_at = item
+        if expires_at and expires_at < time.time():
+            self._store.pop(key, None)
+            return None
+        # mark as recently used
+        self._store.move_to_end(key)
+        return value
+
+    def set(self, key: str, value: str, ttl: int) -> None:
+        expires_at = time.time() + ttl if ttl else None
+        if key in self._store:
+            self._store.pop(key)
+        elif len(self._store) >= self.capacity:
+            self._store.popitem(last=False)
+        self._store[key] = (value, expires_at)
+
+    def delete(self, key: str) -> None:
+        self._store.pop(key, None)
+
+    def size(self) -> int:
+        return len(self._store)
+
+
+class RedisAcademicCache:
+    """Redis-based cache with advanced in-memory fallback and metrics."""
+
+    def __init__(self, redis_url: str = "redis://localhost:6379", ttl: int = 3600, memory_capacity: int = 128) -> None:
         self.ttl = ttl
+        self.metrics = CacheMetrics()
+        self.memory_cache = LRUMemoryCache(capacity=memory_capacity)
         try:
             import redis.asyncio as redis  # type: ignore
             self._redis = redis.from_url(redis_url, decode_responses=True)
             self.enabled = True
         except Exception:
-            # Fallback to in-memory dictionary if redis is unavailable
-            self._store: Dict[str, str] = {}
+            # Fallback to in-memory LRU cache if redis is unavailable
             self.enabled = False
 
     def generate_cache_key(self, source: str, query: str, filters: Optional[Dict[str, Any]] = None) -> str:
@@ -26,26 +84,67 @@ class RedisAcademicCache:
 
     async def get_cached_search(self, key: str) -> Optional[Dict[str, Any]]:
         if self.enabled:
-            value = await self._redis.get(key)
+            try:
+                value = await self._redis.get(key)
+            except Exception:
+                self.metrics.record_error()
+                value = None
             if value:
+                self.metrics.record_hit()
                 return json.loads(value)
-            return None
+            self.metrics.record_miss()
         # memory fallback
-        value = self._store.get(key)
-        return json.loads(value) if value else None
+        value = self.memory_cache.get(key)
+        if value:
+            self.metrics.record_hit()
+            return json.loads(value)
+        self.metrics.record_miss()
+        return None
 
     async def cache_search_result(self, key: str, result: Dict[str, Any], ttl: Optional[int] = None) -> None:
         ttl = ttl or self.ttl
         data = json.dumps(result)
         if self.enabled:
-            await self._redis.set(key, data, ex=ttl)
+            try:
+                await self._redis.set(key, data, ex=ttl)
+            except Exception:
+                self.metrics.record_error()
+                self.memory_cache.set(key, data, ttl)
         else:
-            self._store[key] = data
-            # naive in-memory TTL handling
-            asyncio.get_event_loop().call_later(ttl, lambda: self._store.pop(key, None))
+            self.memory_cache.set(key, data, ttl)
 
     async def invalidate(self, key: str) -> None:
         if self.enabled:
-            await self._redis.delete(key)
-        else:
-            self._store.pop(key, None)
+            try:
+                await self._redis.delete(key)
+            except Exception:
+                self.metrics.record_error()
+        self.memory_cache.delete(key)
+
+    def memory_usage(self) -> int:
+        """Approximate in-memory cache size."""
+        return self.memory_cache.size()
+
+    async def warm_cache(self, entries: Dict[str, Dict[str, Any]], ttl: Optional[int] = None) -> None:
+        """Pre-populate the cache with common queries."""
+        for key, value in entries.items():
+            await self.cache_search_result(key, value, ttl=ttl)
+
+
+def cache_decorator(cache: RedisAcademicCache, source: str):
+    """Decorator to transparently cache async search methods."""
+
+    def wrapper(func):
+        async def inner(query: str, *args: Any, **kwargs: Any):
+            filters = kwargs.get("filters")
+            key = cache.generate_cache_key(source, query, filters)
+            cached = await cache.get_cached_search(key)
+            if cached is not None:
+                return cached
+            result = await func(query, *args, **kwargs)
+            await cache.cache_search_result(key, result)
+            return result
+
+        return inner
+
+    return wrapper

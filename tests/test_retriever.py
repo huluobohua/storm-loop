@@ -12,8 +12,10 @@ def test_retriever_caches_result():
         result1 = await agent.search("quantum physics")
         assert result1.source == "openalex"
 
-        # second call should hit cache
+        # second call should hit cache and metrics should report a hit
         result2 = await agent.search("quantum physics")
         assert result2.results == result1.results
+        metrics = cache.metrics.snapshot()
+        assert metrics["hits"] >= 1
 
     asyncio.run(run())
