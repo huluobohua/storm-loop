@@ -5,10 +5,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
 from knowledge_storm.services.academic_source_service import (
-    AcademicSourceService,
-    SourceQualityScorer,
-    DEFAULT_LIMIT,
-)
+    DEFAULT_LIMIT, AcademicSourceService, SourceQualityScorer)
+from knowledge_storm.services.citation_verification_system import \
+    CitationVerificationSystem
+
 
 class Agent(ABC):
     """Base class for all agents in the multi-agent system."""
@@ -136,9 +136,9 @@ class AcademicRetrieverAgent(Agent):
         self.scorer = SourceQualityScorer()
         if fallback_rm is None:
             try:
-                from knowledge_storm.rm import PerplexityRM
-
                 import os
+
+                from knowledge_storm.rm import PerplexityRM
 
                 api_key = os.getenv("PERPLEXITY_API_KEY")
                 fallback_rm = PerplexityRM(perplexity_api_key=api_key, k=DEFAULT_LIMIT)
@@ -163,16 +163,20 @@ class AcademicRetrieverAgent(Agent):
 class WriterAgent(Agent):
     """Agent that generates simple academic text with citations."""
 
-    def __init__(self, agent_id: str, name: str, role: str = "Writer", citation_style: str = "APA") -> None:
+    def __init__(
+        self,
+        agent_id: str,
+        name: str,
+        role: str = "Writer",
+        citation_style: str = "APA",
+        citation_system: CitationVerificationSystem | None = None,
+    ) -> None:
         super().__init__(agent_id, name, role)
         self.citation_style = citation_style
+        self.citation_system = citation_system or CitationVerificationSystem()
 
     def _format_citation(self, ref: Dict[str, Any]) -> str:
-        authors = ref.get("author", "Unknown")
-        year = ref.get("publication_year") or "n.d."
-        title = ref.get("title", "")
-        doi = ref.get("doi", "")
-        return f"{authors} ({year}). {title}. DOI:{doi}"
+        return self.citation_system.format_citation(ref, style=self.citation_style)
 
     async def execute_task(self, task: str) -> str:
         refs: List[Dict[str, Any]] = self.state.get("references", [])
@@ -183,4 +187,3 @@ class WriterAgent(Agent):
     async def communicate(self, message: str) -> str:
         await asyncio.sleep(0)
         return f"{self.name} acknowledges: {message}"
-
