@@ -1,5 +1,8 @@
-from knowledge_storm.interface import KnowledgeCurationModule, InformationTable
-from knowledge_storm.agents.base import Agent
+from knowledge_storm.interface import KnowledgeCurationModule
+from knowledge_storm.storm_wiki.modules.storm_dataclass import (
+    DialogueTurn,
+    StormInformationTable,
+)
 from knowledge_storm.agent_coordinator import AgentCoordinator
 from knowledge_storm.agents.researcher import AcademicResearcherAgent
 from knowledge_storm.agents.critic import CriticAgent
@@ -33,19 +36,23 @@ class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
         # The output should be an InformationTable and a conversation_log
         print(f"Performing multi-agent research on topic: {topic}")
 
-        # Example: Distribute a task to the researcher agent
-        research_results = await self.coordinator.distribute_task(self.researcher.agent_id, f"Research on {topic}")
+        research_result = await self.coordinator.distribute_task(
+            self.researcher.agent_id, topic
+        )
 
-        # Example: Distribute tasks to multiple agents in parallel
-        parallel_tasks = [
-            (self.critic.agent_id, f"Critique of {topic} research"),
-            (self.verifier.agent_id, f"Verify citations for {topic}"),
+        critique_task = (self.critic.agent_id, topic)
+        verify_task = (self.verifier.agent_id, topic)
+        critique_result, verify_result = await self.coordinator.distribute_tasks_parallel(
+            [critique_task, verify_task]
+        )
+
+        conversations = [
+            (self.researcher.name, [DialogueTurn(agent_utterance=research_result)]),
+            (self.critic.name, [DialogueTurn(agent_utterance=critique_result)]),
+            (self.verifier.name, [DialogueTurn(agent_utterance=verify_result)]),
         ]
-        parallel_results = await self.coordinator.distribute_tasks_parallel(parallel_tasks)
 
-        # For now, return a dummy InformationTable and conversation_log
-        # In a real implementation, these would be populated by the agents' work
-        info_table = InformationTable()
-        conv_log = []
+        info_table = StormInformationTable(conversations)
+        conv_log = StormInformationTable.construct_log_dict(conversations)
 
         return info_table, conv_log
