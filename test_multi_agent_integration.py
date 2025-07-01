@@ -1,5 +1,8 @@
 import asyncio
 import os
+import pytest
+
+pytest.importorskip("dspy")
 from knowledge_storm.storm_wiki.engine import STORMWikiRunner, STORMWikiRunnerArguments, STORMWikiLMConfigs
 from knowledge_storm.rm import PerplexityRM
 from knowledge_storm.lm import GoogleModel

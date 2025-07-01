@@ -5,7 +5,10 @@ import threading
 from typing import Optional, Literal, Any
 
 
-import dspy
+try:
+    import dspy
+except ModuleNotFoundError:  # pragma: no cover - handled for optional dep
+    dspy = None
 import requests
 
 

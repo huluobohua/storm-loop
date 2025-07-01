@@ -4,6 +4,9 @@ Quick test of PerplexityRM to debug the API issue
 """
 
 import os
+import pytest
+
+pytest.importorskip("dspy")
 from knowledge_storm.rm import PerplexityRM
 
 def test_perplexity_api():

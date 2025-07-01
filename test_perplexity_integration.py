@@ -5,6 +5,9 @@ This shows the implementation is working correctly
 """
 
 import os
+import pytest
+
+pytest.importorskip("dspy")
 from knowledge_storm.rm import PerplexityRM
 
 def test_perplexity_import():

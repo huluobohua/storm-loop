@@ -1,5 +1,9 @@
 import os
 import sys
+import pytest
+
+pytest.importorskip("dotenv")
+pytest.importorskip("dspy")
 from dotenv import load_dotenv
 
 # Add the parent directory to sys.path
