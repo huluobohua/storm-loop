@@ -161,24 +161,40 @@ class AcademicRetrieverAgent(Agent):
 
 
 class WriterAgent(Agent):
-    """Agent that generates simple academic text with citations."""
+    """Agent that generates simple academic text with verified citations."""
 
-    def __init__(self, agent_id: str, name: str, role: str = "Writer", citation_style: str = "APA") -> None:
+    def __init__(
+        self,
+        agent_id: str,
+        name: str,
+        role: str = "Writer",
+        citation_style: str = "APA",
+        verifier: "CitationVerificationSystem" | None = None,
+    ) -> None:
         super().__init__(agent_id, name, role)
+        from knowledge_storm.services.citation_verification import (
+            CitationVerificationSystem,
+        )
+
         self.citation_style = citation_style
+        self.verification_system = verifier or CitationVerificationSystem()
 
     def _format_citation(self, ref: Dict[str, Any]) -> str:
-        authors = ref.get("author", "Unknown")
-        year = ref.get("publication_year") or "n.d."
-        title = ref.get("title", "")
-        doi = ref.get("doi", "")
-        return f"{authors} ({year}). {title}. DOI:{doi}"
+        return self.verification_system.format_citation(ref, self.citation_style)
 
     async def execute_task(self, task: str) -> str:
         refs: List[Dict[str, Any]] = self.state.get("references", [])
-        citations = [self._format_citation(r) for r in refs]
+        claim = task
+        lines = [f"Article on {task}"]
+        for ref in refs:
+            verification = self.verification_system.verify_citation(
+                claim, ref
+            )
+            citation = self._format_citation(ref)
+            status = "verified" if verification["verified"] else "unverified"
+            lines.append(f"{citation} ({status})")
         await asyncio.sleep(0)
-        return f"Article on {task}\n" + "\n".join(citations)
+        return "\n".join(lines)
 
     async def communicate(self, message: str) -> str:
         await asyncio.sleep(0)
