@@ -17,6 +17,10 @@ from storm_loop.services.openalex_client import OpenAlexClient
 from storm_loop.services.crossref_client import CrossrefClient
 from storm_loop.services.source_quality_scorer import SourceQualityScorer
 from storm_loop.services.perplexity_client import PerplexityClient
+from storm_loop.services.search_client_factory import (
+    SearchClientFactory,
+    SearchClients,
+)
 from storm_loop.utils.cache_decorators import (
     cache_academic_search, cache_paper_details, cache_doi_resolution,
     cache_quality_score, cache_author_search, cache_trending_papers
@@ -41,6 +45,7 @@ class AcademicSourceService:
         self.openalex_client = None
         self.crossref_client = None
         self.perplexity_client = None
+        self.clients: Optional[SearchClients] = None
         self.quality_scorer = SourceQualityScorer()
 
         # simple local cache for tests
@@ -52,24 +57,20 @@ class AcademicSourceService:
             timeout = aiohttp.ClientTimeout(total=self.config.request_timeout)
             self.session = aiohttp.ClientSession(timeout=timeout)
         
-        # Initialize API clients
-        self.openalex_client = OpenAlexClient(session=self.session)
-        self.crossref_client = CrossrefClient(session=self.session)
-        self.perplexity_client = PerplexityClient(session=self.session)
+        # Initialize API clients via factory
+        factory = SearchClientFactory(self.session)
+        self.clients = factory.create()
+        self.openalex_client = self.clients.openalex
+        self.crossref_client = self.clients.crossref
+        self.perplexity_client = self.clients.perplexity
 
-        await self.openalex_client.__aenter__()
-        await self.crossref_client.__aenter__()
-        await self.perplexity_client.__aenter__()
-        
+        await self.clients.__aenter__()
+
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.openalex_client:
-            await self.openalex_client.__aexit__(exc_type, exc_val, exc_tb)
-        if self.crossref_client:
-            await self.crossref_client.__aexit__(exc_type, exc_val, exc_tb)
-        if self.perplexity_client:
-            await self.perplexity_client.__aexit__(exc_type, exc_val, exc_tb)
+        if self.clients:
+            await self.clients.__aexit__(exc_type, exc_val, exc_tb)
         if self._own_session and self.session:
             await self.session.close()
 
@@ -213,7 +214,7 @@ class AcademicSourceService:
 
     async def fallback_search(self, query: str, limit: int = 5) -> List[AcademicPaper]:
         """Fallback search using Perplexity when academic sources fail."""
-        if getattr(self.perplexity_client, "_disabled", False):
+        if self.perplexity_client.is_disabled():
             storm_logger.debug("Perplexity fallback disabled; skipping search")
             return []
         try:
@@ -224,27 +225,26 @@ class AcademicSourceService:
             return []
 
     def _convert_perplexity_to_papers(self, results: List[Dict[str, Any]]) -> List[AcademicPaper]:
-        """Convert Perplexity search results into ``AcademicPaper`` models.
+        """Convert Perplexity search results into ``AcademicPaper`` models."""
+        return [self._create_paper_from_result(item) for item in results]
 
-        Args:
-            results: Raw result dictionaries returned from the Perplexity API.
+    def _create_paper_from_result(self, item: Dict[str, Any]) -> AcademicPaper:
+        return AcademicPaper(
+            id=self._generate_perplexity_id(),
+            title=item.get("title", "Unknown"),
+            abstract=item.get("snippet"),
+            landing_page_url=item.get("url"),
+            created_date=self._current_timestamp(),
+            raw_data=item,
+        )
 
-        Returns:
-            List of ``AcademicPaper`` instances describing the results.
-        """
-        papers: List[AcademicPaper] = []
-        for item in results:
-            papers.append(
-                AcademicPaper(
-                    id=f"perplexity:{uuid4().hex}",
-                    title=item.get("title", "Unknown"),
-                    abstract=item.get("snippet"),
-                    landing_page_url=item.get("url"),
-                    created_date=datetime.now(),
-                    raw_data=item,
-                )
-            )
-        return papers
+    @staticmethod
+    def _generate_perplexity_id() -> str:
+        return f"perplexity:{uuid4().hex}"
+
+    @staticmethod
+    def _current_timestamp() -> datetime:
+        return datetime.now()
 
     
     def _deduplicate_papers(self, papers: List[AcademicPaper]) -> List[AcademicPaper]:

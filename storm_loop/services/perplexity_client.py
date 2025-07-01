@@ -40,35 +40,50 @@ class PerplexityClient:
     async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Search Perplexity for general information."""
         if self._disabled:
-            storm_logger.debug("Perplexity client disabled; returning empty result")
-            return []
+            return self._disabled_response()
 
-        params = {"q": query, "limit": limit}
-        headers = {}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        url = f"{self.BASE_URL}/search"
-
+        request = self._build_request(query, limit)
         async with self._request_semaphore:
-            try:
-                async with self.session.get(url, params=params, headers=headers) as resp:
-                    if 200 <= resp.status < 300:
-                        data = await resp.json()
-                        return data.get("results", [])
+            return await self._execute_request(request)
 
-                    text = await resp.text()
-                    if resp.status == 401:
-                        storm_logger.error("Perplexity API authentication failed")
-                    elif resp.status == 429:
-                        storm_logger.warning("Perplexity API rate limit exceeded")
-                    else:
-                        storm_logger.error(f"Perplexity API error {resp.status}: {text}")
-                    raise aiohttp.ClientResponseError(
-                        request_info=resp.request_info,
-                        history=resp.history,
-                        status=resp.status,
-                        message=text,
-                    )
-            except Exception as e:
-                storm_logger.error(f"Perplexity request failed: {str(e)}")
-                raise
+    def is_disabled(self) -> bool:
+        return self._disabled
+
+    def _disabled_response(self) -> List[Dict[str, Any]]:
+        storm_logger.debug("Perplexity client disabled; returning empty result")
+        return []
+
+    def _build_request(self, query: str, limit: int) -> Dict[str, Any]:
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        return {
+            "url": f"{self.BASE_URL}/search",
+            "params": {"q": query, "limit": limit},
+            "headers": headers,
+        }
+
+    async def _execute_request(self, request: Dict[str, Any]) -> List[Dict[str, Any]]:
+        try:
+            async with self.session.get(**request) as resp:
+                return await self._handle_response(resp)
+        except Exception as e:
+            storm_logger.error(f"Perplexity request failed: {e}")
+            raise
+
+    async def _handle_response(self, resp: aiohttp.ClientResponse) -> List[Dict[str, Any]]:
+        if 200 <= resp.status < 300:
+            data = await resp.json()
+            return data.get("results", [])
+
+        text = await resp.text()
+        if resp.status == 401:
+            storm_logger.error("Perplexity API authentication failed")
+        elif resp.status == 429:
+            storm_logger.warning("Perplexity API rate limit exceeded")
+        else:
+            storm_logger.error(f"Perplexity API error {resp.status}: {text}")
+        raise aiohttp.ClientResponseError(
+            request_info=resp.request_info,
+            history=resp.history,
+            status=resp.status,
+            message=text,
+        )
