@@ -312,3 +312,25 @@ class TestAcademicSourceService:
         # Should now return cached data
         cached = service._get_from_cache(cache_key)
         assert cached == test_data
+
+    @pytest.mark.asyncio
+    async def test_fallback_triggered(self, service):
+        """Ensure fallback search is used when no academic results."""
+        empty = SearchResult(
+            query=SearchQuery(query="q", limit=5), papers=[], total_count=0, source="openalex"
+        )
+        with patch.object(service, "_search_openalex", return_value=empty), \
+             patch.object(service, "_search_crossref", return_value=empty), \
+             patch.object(service, "fallback_search", return_value=[AcademicPaper(id="p", title="fallback")]) as fb:
+            result = await service.search_papers("q", limit=5)
+            fb.assert_called_once()
+            assert len(result.papers) == 1
+            assert result.papers[0].title == "fallback"
+
+    @pytest.mark.asyncio
+    async def test_fallback_search(self, service):
+        """Test fallback_search converts results to papers."""
+        with patch.object(service.perplexity_client, "search", return_value=[{"title": "T", "url": "u", "snippet": "s"}]):
+            papers = await service.fallback_search("query", limit=1)
+            assert len(papers) == 1
+            assert papers[0].title == "T"

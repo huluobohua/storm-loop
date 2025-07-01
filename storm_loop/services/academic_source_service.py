@@ -6,6 +6,7 @@ import aiohttp
 from typing import List, Optional, Dict, Any, Union, Tuple
 from datetime import datetime
 import hashlib
+import json
 
 from storm_loop.config import get_config
 from storm_loop.models.academic_models import (
@@ -14,6 +15,7 @@ from storm_loop.models.academic_models import (
 from storm_loop.services.openalex_client import OpenAlexClient
 from storm_loop.services.crossref_client import CrossrefClient
 from storm_loop.services.source_quality_scorer import SourceQualityScorer
+from storm_loop.services.perplexity_client import PerplexityClient
 from storm_loop.utils.cache_decorators import (
     cache_academic_search, cache_paper_details, cache_doi_resolution,
     cache_quality_score, cache_author_search, cache_trending_papers
@@ -37,7 +39,11 @@ class AcademicSourceService:
         # Initialize clients
         self.openalex_client = None
         self.crossref_client = None
+        self.perplexity_client = None
         self.quality_scorer = SourceQualityScorer()
+
+        # simple local cache for tests
+        self._cache: Dict[str, Any] = {}
         
     
     async def __aenter__(self):
@@ -48,9 +54,11 @@ class AcademicSourceService:
         # Initialize API clients
         self.openalex_client = OpenAlexClient(session=self.session)
         self.crossref_client = CrossrefClient(session=self.session)
-        
+        self.perplexity_client = PerplexityClient(session=self.session)
+
         await self.openalex_client.__aenter__()
         await self.crossref_client.__aenter__()
+        await self.perplexity_client.__aenter__()
         
         return self
     
@@ -59,8 +67,21 @@ class AcademicSourceService:
             await self.openalex_client.__aexit__(exc_type, exc_val, exc_tb)
         if self.crossref_client:
             await self.crossref_client.__aexit__(exc_type, exc_val, exc_tb)
+        if self.perplexity_client:
+            await self.perplexity_client.__aexit__(exc_type, exc_val, exc_tb)
         if self._own_session and self.session:
             await self.session.close()
+
+    # --- simple cache helpers used in tests ---
+    def _get_cache_key(self, prefix: str, **params: Any) -> str:
+        params_str = json.dumps(params, sort_keys=True, default=str)
+        return f"{prefix}:{hashlib.md5(params_str.encode()).hexdigest()}"
+
+    def _set_cache(self, key: str, value: Any) -> None:
+        self._cache[key] = value
+
+    def _get_from_cache(self, key: str) -> Any:
+        return self._cache.get(key)
     
     
     @cache_academic_search(ttl=3600)
@@ -132,7 +153,12 @@ class AcademicSourceService:
             
             # Sort by combined relevance and quality score
             all_papers = self._rank_papers(all_papers)
-            
+
+            # Use Perplexity fallback if no papers found
+            if not all_papers:
+                fallback = await self.fallback_search(query, limit=limit)
+                all_papers.extend(fallback)
+
             # Limit results
             all_papers = all_papers[:limit]
             
@@ -183,6 +209,29 @@ class AcademicSourceService:
                 total_count=0,
                 source="crossref"
             )
+
+    async def fallback_search(self, query: str, limit: int = 5) -> List[AcademicPaper]:
+        """Fallback search using Perplexity when academic sources fail."""
+        try:
+            results = await self.perplexity_client.search(query, limit=limit)
+        except Exception as e:
+            storm_logger.warning(f"Perplexity search failed: {str(e)}")
+            return []
+
+        papers: List[AcademicPaper] = []
+        for idx, item in enumerate(results):
+            papers.append(
+                AcademicPaper(
+                    id=f"perplexity:{idx}",
+                    title=item.get("title", "Unknown"),
+                    abstract=item.get("snippet"),
+                    landing_page_url=item.get("url"),
+                    created_date=datetime.now(),
+                    raw_data=item,
+                )
+            )
+        return papers
+
     
     def _deduplicate_papers(self, papers: List[AcademicPaper]) -> List[AcademicPaper]:
         """

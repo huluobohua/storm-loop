@@ -1,0 +1,57 @@
+"""Perplexity API client for general knowledge retrieval"""
+
+import asyncio
+import aiohttp
+from typing import List, Dict, Any, Optional
+
+from storm_loop.config import get_config
+from storm_loop.utils.logging import storm_logger
+
+
+class PerplexityClient:
+    """Simple async client for the Perplexity search API."""
+
+    BASE_URL = "https://api.perplexity.ai"
+
+    def __init__(self, api_key: Optional[str] = None, session: Optional[aiohttp.ClientSession] = None):
+        self.config = get_config()
+        self.api_key = api_key or self.config.perplexity_api_key
+        self.session = session
+        self._own_session = session is None
+        self._request_semaphore = asyncio.Semaphore(self.config.max_concurrent_requests)
+
+    async def __aenter__(self):
+        if self._own_session:
+            timeout = aiohttp.ClientTimeout(total=self.config.request_timeout)
+            self.session = aiohttp.ClientSession(timeout=timeout)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._own_session and self.session:
+            await self.session.close()
+
+    async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Search Perplexity for general information."""
+        params = {"q": query, "limit": limit}
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        url = f"{self.BASE_URL}/search"
+
+        async with self._request_semaphore:
+            try:
+                async with self.session.get(url, params=params, headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return data.get("results", [])
+                    text = await resp.text()
+                    storm_logger.error(f"Perplexity API error {resp.status}: {text}")
+                    raise aiohttp.ClientResponseError(
+                        request_info=resp.request_info,
+                        history=resp.history,
+                        status=resp.status,
+                        message=text,
+                    )
+            except Exception as e:
+                storm_logger.error(f"Perplexity request failed: {str(e)}")
+                raise

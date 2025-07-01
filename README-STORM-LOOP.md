@@ -11,6 +11,7 @@ STORM-Loop is an enhanced version of the [STORM (Synthesis of Topic Outlines thr
 
 ### Core Enhancements over STORM
 - **Academic Source Integration**: OpenAlex and Crossref APIs for peer-reviewed papers
+- **Perplexity Fallback**: General knowledge retrieval via Perplexity when academic sources lack results
 - **Multi-Agent Research Architecture**: Specialized agents for research, criticism, and verification
 - **Enhanced Quality Assurance**: Multi-level validation and academic rigor checking
 - **Citation Management**: Real-time verification and formatting in multiple styles
