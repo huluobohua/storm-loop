@@ -4,6 +4,8 @@ import logging
 from concurrent.futures import as_completed
 from typing import List, Union
 
+from ...services.citation_service import CitationVerificationSystem
+
 import dspy
 
 from .callback import BaseCallbackHandler
@@ -137,10 +139,17 @@ class StormArticleGenerationModule(ArticleGenerationModule):
 class ConvToSection(dspy.Module):
     """Use the information collected from the information-seeking conversation to write a section."""
 
-    def __init__(self, engine: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def __init__(
+        self,
+        engine: Union[dspy.dsp.LM, dspy.dsp.HFModel],
+        citation_verifier=None,
+    ):
         super().__init__()
         self.write_section = dspy.Predict(WriteSection)
         self.engine = engine
+        if citation_verifier is None:
+            citation_verifier = CitationVerificationSystem()
+        self.citation_verifier = citation_verifier
 
     def forward(
         self,
@@ -160,6 +169,9 @@ class ConvToSection(dspy.Module):
             section = ArticleTextProcessing.clean_up_section(
                 self.write_section(topic=topic, info=info, section=section).output
             )
+        if self.citation_verifier is not None:
+            # Trigger citation verification; results are not currently used
+            self.citation_verifier.verify_section(section, collected_info)
 
         return dspy.Prediction(section=section)
 
