@@ -3,6 +3,7 @@ import copy
 import logging
 from concurrent.futures import as_completed
 from typing import List, Union
+import asyncio
 
 import dspy
 
@@ -48,6 +49,7 @@ class StormArticleGenerationModule(ArticleGenerationModule):
             "section_name": section_name,
             "section_content": output.section,
             "collected_info": collected_info,
+            "verification": getattr(output, "verification", []),
         }
 
     def generate_article(
@@ -141,6 +143,11 @@ class ConvToSection(dspy.Module):
         super().__init__()
         self.write_section = dspy.Predict(WriteSection)
         self.engine = engine
+        try:
+            from ...services import CitationVerificationSystem  # lazy import
+            self.verifier = CitationVerificationSystem()
+        except Exception:  # pragma: no cover - optional dependency
+            self.verifier = None
 
     def forward(
         self,
@@ -157,11 +164,25 @@ class ConvToSection(dspy.Module):
         info = ArticleTextProcessing.limit_word_count_preserve_newline(info, 1500)
 
         with dspy.settings.context(lm=self.engine):
-            section = ArticleTextProcessing.clean_up_section(
-                self.write_section(topic=topic, info=info, section=section).output
-            )
+            section_text = self.write_section(topic=topic, info=info, section=section).output
+            section = ArticleTextProcessing.clean_up_section(section_text)
 
-        return dspy.Prediction(section=section)
+        verifications = []
+        if self.verifier is not None:
+            for storm_info in collected_info:
+                claim = " ".join(storm_info.snippets)
+                try:
+                    result = asyncio.run(
+                        self.verifier.verify_citation(claim, storm_info.to_dict())
+                    )
+                except RuntimeError:
+                    # nested loop: run new event loop if needed
+                    result = asyncio.new_event_loop().run_until_complete(
+                        self.verifier.verify_citation(claim, storm_info.to_dict())
+                    )
+                verifications.append(result)
+
+        return dspy.Prediction(section=section, verification=verifications)
 
 
 class WriteSection(dspy.Signature):
