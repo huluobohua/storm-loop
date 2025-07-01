@@ -6,8 +6,10 @@ from models.agent import (
     CriticAgent,
     CitationVerifierAgent,
     WriterAgent,
+    AcademicRetrieverAgent,
 )
 from knowledge_storm.services.academic_source_service import AcademicSourceService
+from knowledge_storm.services.cache_service import CacheService
 
 
 async def _run(coro):
@@ -43,3 +45,59 @@ def test_writer_agent_citation_formatting():
     agent.update_state("references", [{"author": "Doe", "publication_year": 2020, "title": "Paper", "doi": "10.1"}])
     text = asyncio.run(agent.execute_task("Topic"))
     assert "Doe" in text
+
+
+def test_cache_service():
+    cache = CacheService(ttl=10)
+    asyncio.run(cache.set("k", {"v": 1}))
+    result = asyncio.run(cache.get("k"))
+    assert result == {"v": 1}
+
+
+def test_academic_retriever_agent_with_fallback():
+    service = AcademicSourceService(cache=CacheService())
+
+    class DummyRM:
+        def forward(self, q):
+            return [{"title": "F"}]
+
+    agent = AcademicRetrieverAgent("r", "Retriever", service=service, fallback_rm=DummyRM())
+    with patch.object(service, "search_combined", new=AsyncMock(return_value=[])):
+        results = asyncio.run(agent.execute_task("topic"))
+        assert results == [{"title": "F"}]
+
+
+def test_academic_source_service_caching():
+    cache = CacheService()
+    service = AcademicSourceService(cache=cache)
+    class MockContext:
+        async def __aenter__(self):
+            return mock_resp
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class MockSession:
+        def __init__(self):
+            self.get_call_count = 0
+
+        def get(self, *args, **kwargs):
+            self.get_call_count += 1
+            return MockContext()
+
+    mock_resp = AsyncMock()
+    mock_resp.json.return_value = {"results": [1]}
+    mock_session = MockSession()
+    from types import SimpleNamespace
+
+    aiohttp_mock = SimpleNamespace(
+        ClientSession=lambda timeout=None: mock_session,
+        ClientTimeout=lambda total=None: None,
+    )
+    with patch(
+        "knowledge_storm.services.utils.aiohttp",
+        aiohttp_mock,
+    ):
+        asyncio.run(service.search_openalex("q"))
+        asyncio.run(service.search_openalex("q"))
+        assert mock_session.get_call_count == 1
