@@ -77,6 +77,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 pip install -r requirements-storm-loop.txt
 pip install -e .[dev]
+# If tests fail with `ModuleNotFoundError: No module named 'pydantic'`,
+# ensure the enhanced requirements file was installed.
 ```
 
 4. **Install pre-commit hooks**

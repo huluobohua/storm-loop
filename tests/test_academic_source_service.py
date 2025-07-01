@@ -3,6 +3,7 @@ Tests for academic source service
 """
 import pytest
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 
@@ -334,3 +335,12 @@ class TestAcademicSourceService:
             papers = await service.fallback_search("query", limit=1)
             assert len(papers) == 1
             assert papers[0].title == "T"
+
+    @pytest.mark.asyncio
+    async def test_fallback_search_failure(self, service, caplog):
+        """fallback_search logs failure and returns empty list."""
+        caplog.set_level(logging.WARNING)
+        with patch.object(service.perplexity_client, "search", side_effect=Exception("boom")):
+            papers = await service.fallback_search("bad", limit=1)
+            assert papers == []
+            assert any("Perplexity fallback failed" in r.message for r in caplog.records)

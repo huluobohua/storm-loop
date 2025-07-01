@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any, Union, Tuple
 from datetime import datetime
 import hashlib
 import json
+from uuid import uuid4
 
 from storm_loop.config import get_config
 from storm_loop.models.academic_models import (
@@ -214,15 +215,18 @@ class AcademicSourceService:
         """Fallback search using Perplexity when academic sources fail."""
         try:
             results = await self.perplexity_client.search(query, limit=limit)
+            return self._convert_perplexity_to_papers(results)
         except Exception as e:
-            storm_logger.warning(f"Perplexity search failed: {str(e)}")
+            storm_logger.warning(f"Perplexity fallback failed for '{query}': {e}")
             return []
 
+    def _convert_perplexity_to_papers(self, results: List[Dict[str, Any]]) -> List[AcademicPaper]:
+        """Convert Perplexity search results into AcademicPaper models."""
         papers: List[AcademicPaper] = []
-        for idx, item in enumerate(results):
+        for item in results:
             papers.append(
                 AcademicPaper(
-                    id=f"perplexity:{idx}",
+                    id=f"perplexity:{uuid4().hex}",
                     title=item.get("title", "Unknown"),
                     abstract=item.get("snippet"),
                     landing_page_url=item.get("url"),
