@@ -11,6 +11,7 @@ STORM-Loop is an enhanced version of the [STORM (Synthesis of Topic Outlines thr
 
 ### Core Enhancements over STORM
 - **Academic Source Integration**: OpenAlex and Crossref APIs for peer-reviewed papers
+- **Perplexity Fallback**: General knowledge retrieval via Perplexity when academic sources lack results
 - **Multi-Agent Research Architecture**: Specialized agents for research, criticism, and verification
 - **Enhanced Quality Assurance**: Multi-level validation and academic rigor checking
 - **Citation Management**: Real-time verification and formatting in multiple styles
@@ -76,6 +77,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 pip install -r requirements-storm-loop.txt
 pip install -e .[dev]
+# If tests fail with `ModuleNotFoundError: No module named 'pydantic'`,
+# ensure the enhanced requirements file was installed.
 ```
 
 4. **Install pre-commit hooks**
@@ -101,6 +104,7 @@ Create a `.env` file in the project root:
 # API Keys
 OPENAI_API_KEY=your_openai_api_key
 PERPLEXITY_API_KEY=your_perplexity_api_key
+# Omit to disable Perplexity fallback
 
 # Redis Configuration
 REDIS_HOST=localhost

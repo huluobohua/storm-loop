@@ -3,6 +3,7 @@ Tests for academic source service
 """
 import pytest
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 
@@ -312,3 +313,45 @@ class TestAcademicSourceService:
         # Should now return cached data
         cached = service._get_from_cache(cache_key)
         assert cached == test_data
+
+    @pytest.mark.asyncio
+    async def test_fallback_triggered(self, service):
+        """Ensure fallback search is used when no academic results."""
+        empty = SearchResult(
+            query=SearchQuery(query="q", limit=5), papers=[], total_count=0, source="openalex"
+        )
+        with patch.object(service, "_search_openalex", return_value=empty), \
+             patch.object(service, "_search_crossref", return_value=empty), \
+             patch.object(service, "fallback_search", return_value=[AcademicPaper(id="p", title="fallback")]) as fb:
+            result = await service.search_papers("q", limit=5)
+            fb.assert_called_once()
+            assert len(result.papers) == 1
+            assert result.papers[0].title == "fallback"
+
+    @pytest.mark.asyncio
+    async def test_fallback_search(self, service):
+        """Test fallback_search converts results to papers."""
+        with patch.object(service.perplexity_client, "search", return_value=[{"title": "T", "url": "u", "snippet": "s"}]):
+            papers = await service.fallback_search("query", limit=1)
+            assert len(papers) == 1
+            assert papers[0].title == "T"
+
+    @pytest.mark.asyncio
+    async def test_fallback_search_failure(self, service, caplog):
+        """fallback_search logs failure and returns empty list."""
+        caplog.set_level(logging.WARNING)
+        with patch.object(service.perplexity_client, "search", side_effect=Exception("boom")):
+            papers = await service.fallback_search("bad", limit=1)
+            assert papers == []
+            assert any("Perplexity fallback failed" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_fallback_disabled_without_api_key(self):
+        """Fallback search returns empty list when API key is missing."""
+        async with AcademicSourceService() as service:
+            # Simulate missing API key
+            service.perplexity_client.api_key = None
+            await service.perplexity_client.__aenter__()
+            assert getattr(service.perplexity_client, "_disabled", False)
+            papers = await service.fallback_search("query")
+            assert papers == []
