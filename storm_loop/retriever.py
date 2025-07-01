@@ -31,29 +31,29 @@ class PerplexityClient:
 
 
 class SearchClientFactory:
-    def __init__(self) -> None:
+    def __init__(self, cache: Optional[RedisAcademicCache] = None) -> None:
+        self.cache = cache
         self.openalex = OpenAlexClient()
         self.crossref = CrossrefClient()
         self.perplexity = PerplexityClient()
+
+        if self.cache:
+            from .cache import cache_decorator
+
+            self.openalex.search = cache_decorator(self.cache, "openalex")(self.openalex.search)
+            self.crossref.search = cache_decorator(self.cache, "crossref")(self.crossref.search)
 
 
 class AcademicRetrieverAgent:
     def __init__(self, cache: RedisAcademicCache, clients: Optional[SearchClientFactory] = None) -> None:
         self.cache = cache
-        self.clients = clients or SearchClientFactory()
+        self.clients = clients or SearchClientFactory(cache)
 
     async def search(self, query: str, filters: Optional[Dict[str, Any]] = None) -> SearchResult:
         filters = filters or {}
-        key = self.cache.generate_cache_key("openalex", query, filters)
-        cached = await self.cache.get_cached_search(key)
-        if cached:
-            return SearchResult(source="openalex", query=query, results=cached)
-
         try:
-            result = await self.clients.openalex.search(query, filters)
+            result = await self.clients.openalex.search(query, filters=filters)
+            return SearchResult(source="openalex", query=query, results=result)
         except Exception:
             result = await self.clients.perplexity.search(query)
             return SearchResult(source="perplexity", query=query, results=result)
-
-        await self.cache.cache_search_result(key, result)
-        return SearchResult(source="openalex", query=query, results=result)
