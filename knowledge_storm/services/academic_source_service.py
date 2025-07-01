@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Optional
 from urllib import parse, request
+
+from .cache_service import CacheService
 
 try:
     import aiohttp  # type: ignore
@@ -22,8 +26,24 @@ class AcademicSourceService:
     OPENALEX_URL = "https://api.openalex.org/works"
     CROSSREF_URL = "https://api.crossref.org/works"
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, cache: CacheService | None = None, ttl: int = 3600) -> None:
+        self.cache = cache or CacheService(ttl=ttl)
+        self.ttl = ttl
+        self._session: aiohttp.ClientSession | None = None
+        self._failure_count = 0
+        self._failure_threshold = 3
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None:
+            if aiohttp is None:
+                raise RuntimeError("aiohttp not installed")
+            self._session = aiohttp.ClientSession()
+        return self._session
+
+    async def close(self) -> None:
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
 
     async def search_openalex(self, query: str, limit: int = DEFAULT_LIMIT) -> List[Dict[str, Any]]:
         params = {"search": query, "per-page": limit}
@@ -45,13 +65,31 @@ class AcademicSourceService:
     async def get_publication_metadata(self, doi: str) -> Dict[str, Any]:
         return await self.resolve_doi(doi)
 
+    async def search_combined(self, query: str, limit: int = DEFAULT_LIMIT) -> List[Dict[str, Any]]:
+        openalex_coro = self.search_openalex(query, limit)
+        crossref_coro = self.search_crossref(query, limit)
+        openalex, crossref = await asyncio.gather(openalex_coro, crossref_coro)
+        return openalex + crossref
+
+    async def warm_cache(self, queries: List[str], limit: int = DEFAULT_LIMIT) -> None:
+        for q in queries:
+            await self.search_combined(q, limit)
+
     async def _fetch_json(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        cache_key = url
+        if params:
+            cache_key += "?" + parse.urlencode(params)
+
+        cached = await self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             if aiohttp:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url, params=params, timeout=10) as resp:
-                        resp.raise_for_status()
-                        return await resp.json()
+                session = await self._get_session()
+                async with session.get(url, params=params, timeout=10) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
             else:
                 def _sync() -> Dict[str, Any]:
                     full_url = url
@@ -60,9 +98,16 @@ class AcademicSourceService:
                     with request.urlopen(full_url) as resp:
                         return json.load(resp)
 
-                return await asyncio.to_thread(_sync)
+                data = await asyncio.to_thread(_sync)
+
+            await self.cache.set(cache_key, data, self.ttl)
+            self._failure_count = 0
+            return data
         except Exception:  # pragma: no cover - network errors
+            self._failure_count += 1
             logger.exception("Failed request to %s", url)
+            if self._failure_count >= self._failure_threshold:
+                raise
             return {}
 
 
