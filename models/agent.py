@@ -120,6 +120,46 @@ class CitationVerifierAgent(Agent):
         return f"{self.name} acknowledged: {message}"
 
 
+class AcademicRetrieverAgent(Agent):
+    """Agent that retrieves academic sources with caching and fallback."""
+
+    def __init__(
+        self,
+        agent_id: str,
+        name: str,
+        role: str = "Academic Retriever",
+        service: AcademicSourceService | None = None,
+        fallback_rm: Any | None = None,
+    ) -> None:
+        super().__init__(agent_id, name, role)
+        self.service = service or AcademicSourceService()
+        self.scorer = SourceQualityScorer()
+        if fallback_rm is None:
+            try:
+                from knowledge_storm.rm import PerplexityRM
+
+                import os
+
+                api_key = os.getenv("PERPLEXITY_API_KEY")
+                fallback_rm = PerplexityRM(perplexity_api_key=api_key, k=DEFAULT_LIMIT)
+            except Exception:  # pragma: no cover - optional dependency
+                fallback_rm = None
+        self.fallback_rm = fallback_rm
+
+    async def execute_task(self, task: str) -> List[Dict[str, Any]]:
+        results = await self.service.search_combined(task, DEFAULT_LIMIT)
+        if not results and self.fallback_rm is not None:
+            return self.fallback_rm.forward(task)
+        for entry in results:
+            entry["score"] = self.scorer.score_source(entry)
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return results
+
+    async def communicate(self, message: str) -> str:
+        await asyncio.sleep(0)
+        return f"{self.name} received: {message}"
+
+
 class WriterAgent(Agent):
     """Agent that generates simple academic text with citations."""
 
