@@ -4,6 +4,9 @@ import logging
 from concurrent.futures import as_completed
 from typing import List, Union
 
+from ...services.citation_verifier import CitationVerifier
+from ...services.section_verifier import SectionCitationVerifier
+
 import dspy
 
 from .callback import BaseCallbackHandler
@@ -28,7 +31,11 @@ class StormArticleGenerationModule(ArticleGenerationModule):
         self.retrieve_top_k = retrieve_top_k
         self.article_gen_lm = article_gen_lm
         self.max_thread_num = max_thread_num
-        self.section_gen = ConvToSection(engine=self.article_gen_lm)
+        citation_verifier = CitationVerifier()
+        section_verifier = SectionCitationVerifier(citation_verifier)
+        self.section_gen = ConvToSection(
+            engine=self.article_gen_lm, section_verifier=section_verifier
+        )
 
     def generate_section(
         self, topic, section_name, information_table, section_outline, section_query
@@ -137,10 +144,15 @@ class StormArticleGenerationModule(ArticleGenerationModule):
 class ConvToSection(dspy.Module):
     """Use the information collected from the information-seeking conversation to write a section."""
 
-    def __init__(self, engine: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def __init__(
+        self,
+        engine: Union[dspy.dsp.LM, dspy.dsp.HFModel],
+        section_verifier: SectionCitationVerifier,
+    ):
         super().__init__()
         self.write_section = dspy.Predict(WriteSection)
         self.engine = engine
+        self.section_verifier = section_verifier
 
     def forward(
         self,
@@ -160,6 +172,9 @@ class ConvToSection(dspy.Module):
             section = ArticleTextProcessing.clean_up_section(
                 self.write_section(topic=topic, info=info, section=section).output
             )
+        if self.section_verifier is not None:
+            # Trigger citation verification; results are not currently used
+            self.section_verifier.verify_section(section, collected_info)
 
         return dspy.Prediction(section=section)
 
