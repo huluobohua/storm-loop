@@ -15,5 +15,11 @@ def test_crossref_rm_ranking():
     ]
     with patch.object(rm.service, "search_works", new=AsyncMock(return_value=items)):
         results = rm.forward("q")
+        assert len(results) == 2
         assert results[0]["doi"] == "2"
         assert results[1]["doi"] == "1"
+        # Verify complete structure
+        assert "url" in results[0]
+        assert "title" in results[0]
+        assert "score" in results[0]
+        assert results[0]["url"] == "https://doi.org/2"

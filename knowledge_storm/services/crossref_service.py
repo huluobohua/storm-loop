@@ -111,7 +111,14 @@ class CrossrefService:
         if not doi:
             return False
         metadata = await self.get_metadata_by_doi(doi)
-        return bool(metadata)
+        if not metadata:
+            return False
+        
+        # Validate key fields match
+        citation_title = citation_data.get("title", "").lower()
+        metadata_title = metadata.get("title", [""])[0].lower() if isinstance(metadata.get("title"), list) else metadata.get("title", "").lower()
+        
+        return citation_title in metadata_title or metadata_title in citation_title
 
     async def get_journal_metadata(self, issn: str) -> Dict[str, Any]:
         data = await self._fetch_json(f"{self.JOURNAL_URL}/{issn}")

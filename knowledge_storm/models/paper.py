@@ -17,6 +17,9 @@ class Paper:
     @classmethod
     def from_crossref_response(cls, crossref_data: Dict[str, Any]) -> "Paper":
         """Convert Crossref API response to Paper object."""
+        if not isinstance(crossref_data, dict):
+            raise TypeError("crossref_data must be a dictionary")
+        
         message = crossref_data.get("message", crossref_data)
         doi = message.get("DOI") or message.get("doi")
 
