@@ -7,6 +7,7 @@ from knowledge_storm.agent_coordinator import AgentCoordinator
 from knowledge_storm.agents.researcher import AcademicResearcherAgent
 from knowledge_storm.agents.critic import CriticAgent
 from knowledge_storm.agents.citation_verifier import CitationVerifierAgent
+from knowledge_storm.agents.planner import ResearchPlannerAgent
 
 class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
     def __init__(self, retriever, persona_generator, conv_simulator_lm, question_asker_lm, max_search_queries_per_turn, search_top_k, max_conv_turn, max_thread_num):
@@ -21,10 +22,12 @@ class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
         self.coordinator = AgentCoordinator()
 
         # Register agents
+        self.planner = ResearchPlannerAgent(agent_id="planner", name="Research Planner")
         self.researcher = AcademicResearcherAgent(agent_id="researcher", name="Academic Researcher")
         self.critic = CriticAgent(agent_id="critic", name="Critic")
         self.verifier = CitationVerifierAgent(agent_id="verifier", name="Citation Verifier")
 
+        self.coordinator.register_agent(self.planner)
         self.coordinator.register_agent(self.researcher)
         self.coordinator.register_agent(self.critic)
         self.coordinator.register_agent(self.verifier)
@@ -35,6 +38,10 @@ class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
         # and potentially self.coordinator.distribute_tasks_parallel
         # The output should be an InformationTable and a conversation_log
         print(f"Performing multi-agent research on topic: {topic}")
+
+        plan_result = await self.coordinator.distribute_task(
+            self.planner.agent_id, topic
+        )
 
         research_result = await self.coordinator.distribute_task(
             self.researcher.agent_id, topic
@@ -47,6 +54,7 @@ class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
         )
 
         conversations = [
+            (self.planner.name, [DialogueTurn(agent_utterance=str(plan_result))]),
             (self.researcher.name, [DialogueTurn(agent_utterance=research_result)]),
             (self.critic.name, [DialogueTurn(agent_utterance=critique_result)]),
             (self.verifier.name, [DialogueTurn(agent_utterance=verify_result)]),
