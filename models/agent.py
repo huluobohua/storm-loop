@@ -185,18 +185,3 @@ class WriterAgent(Agent):
         return f"{self.name} acknowledges: {message}"
 
 
-class ResearchPlannerAgent(Agent):
-    """Agent that produces a simple research plan for a topic."""
-
-    def __init__(self, agent_id: str, name: str, role: str = "Research Planner", planner: Any | None = None) -> None:
-        super().__init__(agent_id, name, role)
-        from knowledge_storm.services.research_planner import ResearchPlanner
-
-        self.planner = planner or ResearchPlanner()
-
-    async def execute_task(self, task: str) -> Dict[str, Any]:
-        return await self.planner.plan_research(task)
-
-    async def communicate(self, message: str) -> str:
-        await asyncio.sleep(0)
-        return f"{self.name} notes: {message}"
