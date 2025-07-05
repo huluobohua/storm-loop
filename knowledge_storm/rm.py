@@ -2,7 +2,16 @@ import logging
 import os
 from typing import Callable, Union, List
 
-import backoff
+try:
+    import backoff  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    class _DummyBackoff:
+        def on_exception(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+
+    backoff = _DummyBackoff()
 import dspy
 import requests
 from dsp import backoff_hdlr, giveup_hdlr
@@ -880,4 +889,42 @@ class TavilySearchRM(dspy.Retrieve):
                     print(f"Error occurs when processing {result=}: {e}\n")
                     print(f"Error occurs when searching query {query}: {e}")
 
+        return collected_results
+
+
+class CrossrefRM(dspy.Retrieve):
+    """Retrieve academic papers from the Crossref API."""
+
+    def __init__(self, k: int = 3, is_valid_source: Callable | None = None):
+        super().__init__(k=k)
+        self.k = k
+        self.endpoint = "https://api.crossref.org/works"
+        self.is_valid_source = is_valid_source or (lambda x: True)
+
+    def forward(
+        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
+    ) -> List[dict]:
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
+        collected_results = []
+        for query in queries:
+            try:
+                resp = requests.get(self.endpoint, params={"query": query, "rows": self.k})
+                data = resp.json()
+                for item in data.get("message", {}).get("items", []):
+                    url = item.get("URL")
+                    title_field = item.get("title")
+                    title = title_field[0] if isinstance(title_field, list) and title_field else ""
+                    abstract = item.get("abstract", "")
+                    if not url or url in exclude_urls or not self.is_valid_source(url):
+                        continue
+                    collected_results.append(
+                        {
+                            "url": url,
+                            "title": title,
+                            "description": abstract or title,
+                            "snippets": [abstract] if abstract else [],
+                        }
+                    )
+            except Exception as e:
+                logging.error("Error occurs when searching query %s: %s", query, e)
         return collected_results
