@@ -8,9 +8,10 @@ except ModuleNotFoundError:  # pragma: no cover - handled for optional deps
     rm = None
 
 from . import interface  # noqa: F401
+from .enhanced_engine import STORMConfig, EnhancedSTORMEngine
 try:
     from .storm_wiki import utils  # noqa: F401
 except ModuleNotFoundError:  # pragma: no cover
     utils = None
 
-__all__ = ["lm", "rm", "interface", "utils"]
+__all__ = ["lm", "rm", "interface", "utils", "STORMConfig", "EnhancedSTORMEngine"]
