@@ -10,6 +10,7 @@ except ModuleNotFoundError:  # pragma: no cover - handled for optional deps
 from . import interface  # noqa: F401
 from .storm_config import STORMConfig  # noqa: F401
 from .hybrid_engine import EnhancedSTORMEngine  # noqa: F401
+from .workflows.academic import AcademicWorkflowRunner  # noqa: F401
 from .exceptions import ServiceUnavailableError  # noqa: F401
 try:
     from .storm_wiki import utils  # noqa: F401
@@ -24,4 +25,5 @@ __all__ = [
     "STORMConfig",
     "EnhancedSTORMEngine",
     "ServiceUnavailableError",
+    "AcademicWorkflowRunner",
 ]
