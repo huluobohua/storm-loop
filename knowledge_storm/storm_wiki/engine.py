@@ -9,7 +9,6 @@ import dspy
 from .modules.article_generation import StormArticleGenerationModule
 from .modules.article_polish import StormArticlePolishingModule
 from .modules.callback import BaseCallbackHandler
-from knowledge_storm.modules.multi_agent_knowledge_curation import MultiAgentKnowledgeCurationModule
 from .modules.outline_generation import StormOutlineGenerationModule
 from .modules.persona_generator import StormPersonaGenerator
 from .modules.retriever import StormRetriever
@@ -149,7 +148,12 @@ class STORMWikiRunner(Engine):
         storm_persona_generator = StormPersonaGenerator(
             self.lm_configs.question_asker_lm
         )
-        self.storm_knowledge_curation_module = MultiAgentKnowledgeCurationModule(
+        from knowledge_storm.modules.multi_agent_knowledge_curation import (
+            KnowledgeCurationConfig,
+            MultiAgentKnowledgeCurationModule,
+        )
+
+        curation_config = KnowledgeCurationConfig(
             retriever=self.retriever,
             persona_generator=storm_persona_generator,
             conv_simulator_lm=self.lm_configs.conv_simulator_lm,
@@ -158,6 +162,10 @@ class STORMWikiRunner(Engine):
             search_top_k=self.args.search_top_k,
             max_conv_turn=self.args.max_conv_turn,
             max_thread_num=self.args.max_thread_num,
+        )
+
+        self.storm_knowledge_curation_module = MultiAgentKnowledgeCurationModule(
+            curation_config
         )
         self.storm_outline_generation_module = StormOutlineGenerationModule(
             outline_gen_lm=self.lm_configs.outline_gen_lm
