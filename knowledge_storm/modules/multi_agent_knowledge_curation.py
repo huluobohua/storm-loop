@@ -7,6 +7,10 @@ from knowledge_storm.agent_coordinator import AgentCoordinator
 from knowledge_storm.agents.researcher import AcademicResearcherAgent
 from knowledge_storm.agents.critic import CriticAgent
 from knowledge_storm.agents.citation_verifier import CitationVerifierAgent
+from knowledge_storm.agents.planner import ResearchPlannerAgent
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
     def __init__(self, retriever, persona_generator, conv_simulator_lm, question_asker_lm, max_search_queries_per_turn, search_top_k, max_conv_turn, max_thread_num):
@@ -21,38 +25,52 @@ class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
         self.coordinator = AgentCoordinator()
 
         # Register agents
+        self.planner = ResearchPlannerAgent(agent_id="planner", name="Research Planner")
         self.researcher = AcademicResearcherAgent(agent_id="researcher", name="Academic Researcher")
         self.critic = CriticAgent(agent_id="critic", name="Critic")
         self.verifier = CitationVerifierAgent(agent_id="verifier", name="Citation Verifier")
 
+        self.coordinator.register_agent(self.planner)
         self.coordinator.register_agent(self.researcher)
         self.coordinator.register_agent(self.critic)
         self.coordinator.register_agent(self.verifier)
 
-    async def research(self, topic, ground_truth_url="", callback_handler=None, max_perspective=3, disable_perspective=False, return_conversation_log=True):
-        # Placeholder for multi-agent research logic
-        # This will involve orchestrating calls to self.coordinator.distribute_task
-        # and potentially self.coordinator.distribute_tasks_parallel
-        # The output should be an InformationTable and a conversation_log
+    async def _safely_execute_task(self, agent_id: str, task: str, task_name: str):
+        """Execute coordinator task and handle any errors."""
+        try:
+            return await self.coordinator.distribute_task(agent_id, task)
+        except Exception as e:
+            logger.warning(f"{task_name} failed for {task}: {e}")
+            return f"{task_name} failed"
+
+    async def research(self, topic, ground_truth_url="", callback_handler=None, max_perspective=0, disable_perspective=True, return_conversation_log=False):
+        """Research using multi-agent coordination with error handling."""
         print(f"Performing multi-agent research on topic: {topic}")
 
-        research_result = await self.coordinator.distribute_task(
-            self.researcher.agent_id, topic
+        # Initialize results
+        plan_result = await self._safely_execute_task(
+            self.planner.agent_id, topic, "Planning"
         )
-
-        critique_task = (self.critic.agent_id, topic)
-        verify_task = (self.verifier.agent_id, topic)
-        critique_result, verify_result = await self.coordinator.distribute_tasks_parallel(
-            [critique_task, verify_task]
+        research_result = await self._safely_execute_task(
+            self.researcher.agent_id, topic, "Research"
+        )
+        critique_result = await self._safely_execute_task(
+            self.critic.agent_id, research_result, "Critique"
+        )
+        verify_result = await self._safely_execute_task(
+            self.verifier.agent_id, research_result, "Verification"
         )
 
         conversations = [
+            (self.planner.name, [DialogueTurn(agent_utterance=str(plan_result))]),
             (self.researcher.name, [DialogueTurn(agent_utterance=research_result)]),
             (self.critic.name, [DialogueTurn(agent_utterance=critique_result)]),
             (self.verifier.name, [DialogueTurn(agent_utterance=verify_result)]),
         ]
 
-        info_table = StormInformationTable(conversations)
-        conv_log = StormInformationTable.construct_log_dict(conversations)
+        info_table = StormInformationTable()
+        info_table.conversations = conversations
 
-        return info_table, conv_log
+        if return_conversation_log:
+            return info_table, conversations
+        return info_table
