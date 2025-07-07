@@ -17,15 +17,29 @@ This framework provides:
 """
 
 from .core import AcademicValidationFramework
+from .models import ResearchData
 from .validators import (
     PRISMAValidator,
     CitationAccuracyValidator,
+    RealPRISMAValidator,
+    RealCitationValidator,
 )
+from .validators.enhanced_prisma_validator import EnhancedPRISMAValidator
+from .validators.enhanced_citation_validator import EnhancedCitationValidator
+from .validators.bias_detector import BiasDetector
+from .config import ValidationConfig
 
 __all__ = [
     "AcademicValidationFramework",
     "PRISMAValidator",
     "CitationAccuracyValidator",
+    "ResearchData",
+    "RealPRISMAValidator",
+    "RealCitationValidator",
+    "EnhancedPRISMAValidator",
+    "EnhancedCitationValidator",
+    "BiasDetector",
+    "ValidationConfig",
 ]
 
 __version__ = "1.0.0"

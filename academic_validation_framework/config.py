@@ -298,3 +298,31 @@ class ExpertPanelConfig:
     track_reviewer_bias: bool = True
     validate_expert_credentials: bool = True
     monitor_review_quality: bool = True
+
+
+@dataclass
+class ValidationConfig:
+    """Centralized configuration for validation framework."""
+
+    # Thresholds
+    citation_accuracy_threshold: float = 0.95
+    prisma_compliance_threshold: float = 0.80
+    bias_detection_threshold: float = 0.85
+
+    # Performance
+    max_concurrent_validations: int = 50
+    timeout_seconds: int = 30
+    memory_limit_mb: int = 2048
+
+    # API Configuration
+    api_rate_limits: Dict[str, int] = None
+    retry_attempts: int = 3
+    backoff_factor: float = 2.0
+
+    def __post_init__(self):
+        if self.api_rate_limits is None:
+            self.api_rate_limits = {
+                'openAlex': 10,  # requests per second
+                'crossref': 5,
+                'institutional': 2
+            }
