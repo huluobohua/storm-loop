@@ -1,19 +1,14 @@
 """
 Performance Benchmark Suite for academic validation framework.
 
-Comprehensive performance testing including response time, memory usage, 
-throughput, and concurrent user load testing.
+This module imports and uses the real performance benchmark implementation.
 """
 
-import asyncio
-import time
-from typing import Any, Dict, List, Optional
+# Import the real implementation
+from .real_performance_benchmark import RealPerformanceBenchmark
 
-from .base import BaseBenchmarkSuite, BenchmarkContext, BenchmarkMetrics, PerformanceProfiler
-from ..core import ValidationResult
-
-
-class PerformanceBenchmarkSuite(BaseBenchmarkSuite):
+# Create alias for backward compatibility
+class PerformanceBenchmarkSuite(RealPerformanceBenchmark):
     """
     Comprehensive performance benchmarking for academic research systems.
     

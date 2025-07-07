@@ -1,17 +1,14 @@
 """
 Citation Accuracy Validator for academic research validation.
 
-Validates citation formatting, completeness, and accuracy across different citation styles.
+This module imports and uses the real citation validator implementation.
 """
 
-import re
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+# Import the real implementation
+from .real_citation_validator import RealCitationValidator
 
-from .base import BaseValidator, ValidationContext, ValidationResult
-
-
-class CitationAccuracyValidator(BaseValidator):
+# Create alias for backward compatibility
+class CitationAccuracyValidator(RealCitationValidator):
     """
     Validates citation accuracy, formatting, and completeness.
     
