@@ -97,6 +97,10 @@ class ResearchData:
     protocol_registration: Optional[str] = None
     extraction_method: Optional[str] = None
     extracted_fields: List[str] = field(default_factory=list)
+    authors: List[str] = field(default_factory=list)
+    publication_year: Optional[int] = None
+    journal: Optional[str] = None
+    doi: Optional[str] = None
 
 
 @dataclass

@@ -21,11 +21,19 @@ from .validators import (
     PRISMAValidator,
     CitationAccuracyValidator,
 )
+from .validators.enhanced_prisma_validator import EnhancedPRISMAValidator
+from .validators.enhanced_citation_validator import EnhancedCitationValidator
+from .validators.bias_detector import BiasDetector
+from .config import ValidationConfig
 
 __all__ = [
     "AcademicValidationFramework",
     "PRISMAValidator",
     "CitationAccuracyValidator",
+    "EnhancedPRISMAValidator",
+    "EnhancedCitationValidator",
+    "BiasDetector",
+    "ValidationConfig",
 ]
 
 __version__ = "1.0.0"
