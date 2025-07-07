@@ -58,7 +58,11 @@ async def test_basic_framework_functionality():
             log_level="INFO"
         )
         
+        # Create framework with config only
         framework = AcademicValidationFramework(config=config)
+        
+        # Configure logging separately (normally done once at app startup)
+        framework.configure_logging()
         
         # Register a validator
         prisma_validator = PRISMAValidator()
@@ -147,6 +151,10 @@ async def test_comprehensive_runner():
             config=config,
             enable_all_tests=False  # Start with minimal setup
         )
+        
+        # Configure logging if runner has a framework
+        if hasattr(runner, 'framework'):
+            runner.framework.configure_logging()
         
         # Manually add core validators that don't require external dependencies
         from academic_validation_framework.validators.prisma_validator import PRISMAValidator

@@ -9,26 +9,20 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Dict, List, Optional, Union
 
 from .config import FrameworkConfig
 from .models import ValidationResult, ValidationSession
+from .interfaces import (
+    ValidatorProtocol,
+    BenchmarkProtocol,
+    DatabaseIntegrationProtocol,
+    CredibilityAssessorProtocol,
+    ReportGeneratorProtocol
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-class TestExecutor(Protocol):
-    """Protocol for test execution."""
-    
-    async def execute_test(
-        self, 
-        test_name: str, 
-        test_data: Any, 
-        **kwargs: Any
-    ) -> ValidationResult:
-        """Execute a single test and return the result."""
-        ...
 
 
 class AcademicValidationFramework:
@@ -39,61 +33,76 @@ class AcademicValidationFramework:
     database integrations, credibility assessments, and reporting.
     """
     
-    def __init__(
-        self,
-        config: Optional[FrameworkConfig] = None,
-        validators: Optional[List[Any]] = None,  # Use Any to avoid circular imports for now
-        benchmarks: Optional[List[Any]] = None,
-        database_testers: Optional[List[Any]] = None,
-        credibility_assessors: Optional[List[Any]] = None,
-        report_generators: Optional[List[Any]] = None,
-    ):
+    def __init__(self, config: Optional[FrameworkConfig] = None):
         self.config = config or FrameworkConfig()
-        self.validators = validators or []
-        self.benchmarks = benchmarks or []
-        self.database_testers = database_testers or []
-        self.credibility_assessors = credibility_assessors or []
-        self.report_generators = report_generators or []
+        
+        # Get components from config
+        self.validators = self.config.validators
+        self.benchmarks = self.config.benchmarks
+        self.database_testers = self.config.database_testers
+        self.credibility_assessors = self.config.credibility_assessors
+        self.report_generators = self.config.report_generators
         
         self.sessions: List[ValidationSession] = []
         self.current_session: Optional[ValidationSession] = None
         
-        # Setup logging
-        self._setup_logging()
+        # Logging should be configured at application level, not here
+        self._logging_configured = False
     
-    def _setup_logging(self) -> None:
-        """Setup framework logging."""
+    def configure_logging(self) -> None:
+        """Configure framework logging. Should be called once at application startup."""
+        if self._logging_configured:
+            logger.warning("Logging already configured, skipping reconfiguration")
+            return
+            
         log_level = getattr(logging, self.config.log_level.upper())
-        logging.basicConfig(
-            level=log_level,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.FileHandler(self.config.log_file) if self.config.log_file else logging.NullHandler(),
-                logging.StreamHandler() if self.config.console_logging else logging.NullHandler(),
-            ]
+        
+        # Get framework logger specifically, not root logger
+        framework_logger = logging.getLogger('academic_validation_framework')
+        framework_logger.setLevel(log_level)
+        
+        # Clear any existing handlers
+        framework_logger.handlers.clear()
+        
+        # Add handlers based on config
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
+        
+        if self.config.log_file:
+            file_handler = logging.FileHandler(self.config.log_file)
+            file_handler.setFormatter(formatter)
+            framework_logger.addHandler(file_handler)
+            
+        if self.config.console_logging:
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            framework_logger.addHandler(console_handler)
+            
+        self._logging_configured = True
+        logger.info("Logging configured successfully")
     
-    def register_validator(self, validator: Any) -> None:
+    def register_validator(self, validator: ValidatorProtocol) -> None:
         """Register a new validator."""
         self.validators.append(validator)
         logger.info(f"Registered validator: {validator.__class__.__name__}")
     
-    def register_benchmark_suite(self, benchmark: Any) -> None:
+    def register_benchmark_suite(self, benchmark: BenchmarkProtocol) -> None:
         """Register a new benchmark suite."""
         self.benchmarks.append(benchmark)
         logger.info(f"Registered benchmark suite: {benchmark.__class__.__name__}")
     
-    def register_database_tester(self, tester: Any) -> None:
+    def register_database_tester(self, tester: DatabaseIntegrationProtocol) -> None:
         """Register a new database integration tester."""
         self.database_testers.append(tester)
         logger.info(f"Registered database tester: {tester.__class__.__name__}")
     
-    def register_credibility_assessor(self, assessor: Any) -> None:
+    def register_credibility_assessor(self, assessor: CredibilityAssessorProtocol) -> None:
         """Register a new credibility assessor."""
         self.credibility_assessors.append(assessor)
         logger.info(f"Registered credibility assessor: {assessor.__class__.__name__}")
     
-    def register_report_generator(self, generator: Any) -> None:
+    def register_report_generator(self, generator: ReportGeneratorProtocol) -> None:
         """Register a new report generator."""
         self.report_generators.append(generator)
         logger.info(f"Registered report generator: {generator.__class__.__name__}")
@@ -107,9 +116,21 @@ class AcademicValidationFramework:
         if session_id is None:
             session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
+        # Create a minimal request for the session
+        from .models import ValidationRequest, ResearchData
+        
+        minimal_request = ValidationRequest(
+            research_data=ResearchData(
+                title="Session Data",
+                abstract="Session created for validation",
+                methodology="Various"
+            ),
+            metadata=metadata or {}
+        )
+        
         self.current_session = ValidationSession(
             session_id=session_id,
-            config=self.config,
+            request=minimal_request,
             metadata=metadata or {},
         )
         

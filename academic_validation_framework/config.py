@@ -4,7 +4,16 @@ Configuration module for Academic Validation Framework.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .interfaces import (
+        ValidatorProtocol,
+        BenchmarkProtocol,
+        DatabaseIntegrationProtocol,
+        CredibilityAssessorProtocol,
+        ReportGeneratorProtocol
+    )
 
 
 @dataclass
@@ -142,6 +151,13 @@ class FrameworkConfig:
     enable_methodology_recommendation: bool = True
     enable_literature_gap_analysis: bool = True
     enable_research_trend_analysis: bool = False
+    
+    # Component configuration - initialized in __post_init__ or externally
+    validators: List['ValidatorProtocol'] = field(default_factory=list)
+    benchmarks: List['BenchmarkProtocol'] = field(default_factory=list)
+    database_testers: List['DatabaseIntegrationProtocol'] = field(default_factory=list)
+    credibility_assessors: List['CredibilityAssessorProtocol'] = field(default_factory=list)
+    report_generators: List['ReportGeneratorProtocol'] = field(default_factory=list)
     
     def __post_init__(self):
         """Validate configuration after initialization."""

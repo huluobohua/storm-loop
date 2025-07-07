@@ -4,6 +4,8 @@ Citation Accuracy Validator for academic research validation.
 This module imports and uses the real citation validator implementation.
 """
 
+from typing import Optional, Dict, Any
+
 # Import the real implementation
 from .real_citation_validator import RealCitationValidator
 
