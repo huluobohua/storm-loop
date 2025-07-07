@@ -84,14 +84,18 @@ class ResearchData:
     
     title: str
     abstract: str
-    methodology: str
-    search_terms: List[str]
-    databases_used: List[str]
+    methodology: str = ""
+    search_terms: List[str] = field(default_factory=list)
+    databases_used: List[str] = field(default_factory=list)
     date_range: Optional[Dict[str, datetime]] = None
     inclusion_criteria: List[str] = field(default_factory=list)
     exclusion_criteria: List[str] = field(default_factory=list)
     papers: List[Dict[str, Any]] = field(default_factory=list)
     citations: List[str] = field(default_factory=list)
+    authors: List[str] = field(default_factory=list)
+    publication_year: Optional[int] = None
+    journal: Optional[str] = None
+    doi: Optional[str] = None
     raw_content: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     protocol_registration: Optional[str] = None
