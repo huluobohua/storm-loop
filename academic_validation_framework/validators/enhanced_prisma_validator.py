@@ -67,41 +67,173 @@ class EnhancedPRISMAValidator:
         )
 
     async def _validate_checkpoint(self, checkpoint_name: str, data: ResearchData) -> PRISMACheckpoint:
-        """Validate individual PRISMA checkpoint."""
-        # Protocol registration check
+        """Validate individual PRISMA checkpoint with comprehensive logic."""
+        abstract_text = (data.abstract or "").lower()
+        title_text = (data.title or "").lower()
+        combined_text = f"{title_text} {abstract_text}"
+        
+        # 1. Protocol registration check
         if checkpoint_name == "protocol_registration":
-            has_protocol = any(
-                keyword in data.abstract.lower() if data.abstract else False
-                for keyword in ["protocol", "prospero", "registration"]
-            )
+            protocol_keywords = ["protocol", "prospero", "registration", "registered", "crd", "protocol number"]
+            has_protocol = any(keyword in combined_text for keyword in protocol_keywords)
+            score = 1.0 if has_protocol else 0.0
             return PRISMACheckpoint(
                 name=checkpoint_name,
-                description="Protocol was registered before study began",
+                description="Protocol was registered before study began (PROSPERO, etc.)",
                 passed=has_protocol,
-                score=1.0 if has_protocol else 0.0,
-                details=f"Protocol registration {'found' if has_protocol else 'not found'} in abstract"
+                score=score,
+                details=f"Protocol registration {'found' if has_protocol else 'not found'} in title/abstract"
             )
 
-        # Search strategy check
+        # 2. Search strategy check
         elif checkpoint_name == "search_strategy":
-            has_search_strategy = any(
-                keyword in data.abstract.lower() if data.abstract else False
-                for keyword in ["search", "database", "pubmed", "embase", "cochrane"]
-            )
+            search_keywords = ["search", "database", "pubmed", "embase", "cochrane", "medline", "scopus", "web of science"]
+            has_search = any(keyword in combined_text for keyword in search_keywords)
+            score = 1.0 if has_search else 0.0
             return PRISMACheckpoint(
                 name=checkpoint_name,
-                description="Search strategy is documented",
-                passed=has_search_strategy,
-                score=1.0 if has_search_strategy else 0.0,
-                details=f"Search strategy {'documented' if has_search_strategy else 'not documented'}"
+                description="Search strategy and databases are documented",
+                passed=has_search,
+                score=score,
+                details=f"Search strategy {'documented' if has_search else 'not documented'} in abstract"
             )
 
-        # Default implementation for other checkpoints
+        # 3. Eligibility criteria check
+        elif checkpoint_name == "eligibility_criteria":
+            criteria_keywords = ["inclusion", "exclusion", "criteria", "eligible", "eligibility", "included", "excluded"]
+            has_criteria = any(keyword in combined_text for keyword in criteria_keywords)
+            score = 1.0 if has_criteria else 0.0
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Study selection criteria are clearly defined",
+                passed=has_criteria,
+                score=score,
+                details=f"Eligibility criteria {'specified' if has_criteria else 'not specified'}"
+            )
+
+        # 4. Information sources check
+        elif checkpoint_name == "information_sources":
+            source_keywords = ["database", "source", "electronic", "grey literature", "reference", "hand search"]
+            has_sources = any(keyword in combined_text for keyword in source_keywords)
+            score = 1.0 if has_sources else 0.0
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Information sources are documented",
+                passed=has_sources,
+                score=score,
+                details=f"Information sources {'documented' if has_sources else 'not documented'}"
+            )
+
+        # 5. Study selection check
+        elif checkpoint_name == "study_selection":
+            selection_keywords = ["screening", "selection", "reviewer", "independent", "duplicate", "agreement"]
+            has_selection = any(keyword in combined_text for keyword in selection_keywords)
+            score = 1.0 if has_selection else 0.0
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Study selection process is described",
+                passed=has_selection,
+                score=score,
+                details=f"Study selection process {'described' if has_selection else 'not described'}"
+            )
+
+        # 6. Data extraction check
+        elif checkpoint_name == "data_extraction":
+            extraction_keywords = ["data extraction", "extracted", "extraction form", "standardized", "pilot"]
+            has_extraction = any(keyword in combined_text for keyword in extraction_keywords)
+            score = 1.0 if has_extraction else 0.0
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Data extraction methods are described",
+                passed=has_extraction,
+                score=score,
+                details=f"Data extraction {'described' if has_extraction else 'not described'}"
+            )
+
+        # 7. Risk of bias assessment check
+        elif checkpoint_name == "risk_of_bias":
+            bias_keywords = ["risk of bias", "quality assessment", "cochrane", "rob", "methodological quality", "bias assessment"]
+            has_bias_assessment = any(keyword in combined_text for keyword in bias_keywords)
+            score = 1.0 if has_bias_assessment else 0.0
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Risk of bias assessment is performed",
+                passed=has_bias_assessment,
+                score=score,
+                details=f"Risk of bias assessment {'performed' if has_bias_assessment else 'not performed'}"
+            )
+
+        # 8. Synthesis methods check
+        elif checkpoint_name == "synthesis_methods":
+            synthesis_keywords = ["meta-analysis", "synthesis", "pooled", "statistical", "heterogeneity", "fixed effect", "random effect"]
+            has_synthesis = any(keyword in combined_text for keyword in synthesis_keywords)
+            score = 1.0 if has_synthesis else 0.0
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Data synthesis methods are described",
+                passed=has_synthesis,
+                score=score,
+                details=f"Synthesis methods {'described' if has_synthesis else 'not described'}"
+            )
+
+        # 9. Reporting bias check
+        elif checkpoint_name == "reporting_bias":
+            reporting_keywords = ["publication bias", "funnel plot", "egger", "begg", "reporting bias", "selective reporting"]
+            has_reporting_check = any(keyword in combined_text for keyword in reporting_keywords)
+            score = 1.0 if has_reporting_check else 0.5  # Partial score as it's often not mentioned in abstract
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Reporting bias assessment is addressed",
+                passed=has_reporting_check,
+                score=score,
+                details=f"Reporting bias {'assessed' if has_reporting_check else 'not explicitly mentioned'}"
+            )
+
+        # 10. Certainty assessment check
+        elif checkpoint_name == "certainty_assessment":
+            certainty_keywords = ["grade", "certainty", "confidence", "evidence quality", "grade assessment"]
+            has_certainty = any(keyword in combined_text for keyword in certainty_keywords)
+            score = 1.0 if has_certainty else 0.5  # Partial score as GRADE is not always mentioned in abstract
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Certainty of evidence is assessed",
+                passed=has_certainty,
+                score=score,
+                details=f"Certainty assessment {'mentioned' if has_certainty else 'not explicitly mentioned'}"
+            )
+
+        # 11. Study characteristics check
+        elif checkpoint_name == "study_characteristics":
+            char_keywords = ["characteristics", "participant", "intervention", "outcome", "study design", "population"]
+            has_characteristics = any(keyword in combined_text for keyword in char_keywords)
+            score = 1.0 if has_characteristics else 0.0
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Study characteristics are described",
+                passed=has_characteristics,
+                score=score,
+                details=f"Study characteristics {'described' if has_characteristics else 'not described'}"
+            )
+
+        # 12. Results synthesis check
+        elif checkpoint_name == "results_synthesis":
+            results_keywords = ["result", "finding", "outcome", "effect", "significant", "association", "conclusion"]
+            has_results = any(keyword in combined_text for keyword in results_keywords)
+            score = 1.0 if has_results else 0.0
+            return PRISMACheckpoint(
+                name=checkpoint_name,
+                description="Results of synthesis are presented",
+                passed=has_results,
+                score=score,
+                details=f"Results synthesis {'presented' if has_results else 'not clearly presented'}"
+            )
+
+        # Default fallback
         else:
             return PRISMACheckpoint(
                 name=checkpoint_name,
-                description=f"Check for {checkpoint_name.replace('_', ' ')}",
-                passed=True,  # Placeholder - implement real logic
-                score=0.8,    # Placeholder score
-                details=f"Placeholder validation for {checkpoint_name}"
+                description=f"Assessment of {checkpoint_name.replace('_', ' ')}",
+                passed=False,
+                score=0.0,
+                details=f"Unknown checkpoint: {checkpoint_name}"
             )

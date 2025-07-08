@@ -1,469 +1,570 @@
 """
-MLA citation format validation strategy.
+MLA Citation Format Strategy Implementation
 
-This module implements the Strategy pattern for MLA (Modern Language Association) 
-citation format validation with comprehensive rule checking.
+Comprehensive MLA 8th Edition citation validation strategy following
+the Strategy pattern and providing detailed validation evidence.
 """
 
 import re
-from typing import Dict, List, Set
-from .base import CitationFormatStrategy, ValidationResult, ValidationError, ValidationSeverity
-from ..models import CitationStyle
+import time
+from typing import List, Dict, Any, Tuple, Optional
+
+from .base import (
+    CitationFormatStrategy, 
+    FormatValidationResult, 
+    ValidationEvidence,
+    ErrorSeverity
+)
 
 
-class MLAStrategy(CitationFormatStrategy):
+class MLAFormatStrategy(CitationFormatStrategy):
     """
-    MLA citation format validation strategy.
+    MLA 8th Edition citation format validation strategy.
     
-    Implements validation rules for MLA 8th edition citation format.
+    Provides comprehensive validation for MLA-style citations including
+    journal articles, books, web sources, and other citation types.
     """
     
-    def __init__(self, strict_mode: bool = True):
-        """
-        Initialize MLA citation strategy.
-        
-        Args:
-            strict_mode: Whether to apply strict MLA validation rules
-        """
+    def __init__(self, strict_mode: bool = False):
         super().__init__(strict_mode)
-        self._setup_patterns()
+        self._citation_type_cache: Dict[str, str] = {}
     
     @property
     def format_name(self) -> str:
-        """Return the name of the citation format."""
         return "MLA"
     
     @property
-    def citation_style(self) -> CitationStyle:
-        """Return the CitationStyle enum value."""
-        return CitationStyle.MLA
+    def format_version(self) -> str:
+        return "8th Edition"
     
     @property
-    def required_fields(self) -> Set[str]:
-        """Return the set of required fields for MLA citations."""
-        return {
-            'author',
-            'title',
-            'container'  # Could be journal, website, book, etc.
-        }
+    def supported_types(self) -> List[str]:
+        return [
+            "journal_article",
+            "book",
+            "book_chapter", 
+            "web_source",
+            "conference_paper",
+            "thesis",
+            "newspaper",
+            "magazine",
+            "anthology",
+            "interview",
+            "film",
+            "artwork"
+        ]
     
-    @property
-    def optional_fields(self) -> Set[str]:
-        """Return the set of optional fields for MLA citations."""
-        return {
-            'other_contributors',
-            'version',
-            'number',
-            'publisher',
-            'publication_date',
-            'location',
-            'date_of_access',
-            'url'
-        }
-    
-    def _setup_patterns(self):
-        """Set up regex patterns for MLA validation."""
-        # Author patterns (MLA uses full names, not initials)
-        self.author_patterns = {
-            'single_author': r'^[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*$',
-            'multiple_authors': r'^[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:,\s*and\s*[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*)*$',
-            'et_al': r'^[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,?\s*et\s*al\.$'
-        }
-        
-        # Title patterns (MLA uses title case)
-        self.title_patterns = {
-            'title_case': r'^[A-Z][A-Za-z\s]*(?:[A-Z][A-Za-z\s]*)*$',
-            'with_subtitle': r'^[A-Z][A-Za-z\s]*:\s*[A-Z][A-Za-z\s]*$'
-        }
-        
-        # Container patterns (journals, websites, etc.)
-        self.container_pattern = r'^[A-Z][A-Za-z\s&:,-]+[A-Za-z]$'
-        
-        # Date patterns
-        self.date_patterns = {
-            'full_date': r'^\d{1,2}\s+[A-Za-z]+\s+\d{4}$',  # 15 May 2020
-            'month_year': r'^[A-Za-z]+\s+\d{4}$',  # May 2020
-            'year_only': r'^\d{4}$'  # 2020
-        }
-        
-        # Page patterns
-        self.page_patterns = {
-            'range': r'^pp\.\s*\d+[-–]\d+$',
-            'single': r'^p\.\s*\d+$',
-            'no_prefix': r'^\d+[-–]\d+$'
-        }
-        
-        # URL pattern
-        self.url_pattern = r'^https?:\/\/[^\s]+$'
-    
-    def validate_single_citation(self, citation: str) -> ValidationResult:
+    def get_validation_patterns(self) -> Dict[str, str]:
         """
-        Validate a single MLA citation string.
+        Comprehensive MLA 8th Edition regex patterns.
+        
+        Returns:
+            Dictionary of pattern names to regex strings
+        """
+        return {
+            # Author patterns (MLA uses full names, not initials)
+            "single_author": r"^[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\.",
+            "multiple_authors": r"^[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,?\s*and\s*[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*\.",
+            "et_al": r"[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,?\s*et\s*al\.",
+            "corporate_author": r"^[A-Z][A-Za-z\s&,\.]+\.",
+            
+            # Title patterns (MLA uses title case, in quotes for articles)
+            "article_title_quotes": r'"[A-Z][^"]*\.?"',
+            "book_title_italics": r"\*[A-Z][^*]+\*",
+            "title_case": r"[A-Z][A-Za-z\s]*(?:[A-Z][A-Za-z\s]*)*",
+            "with_subtitle": r"[A-Z][A-Za-z\s]*:\s*[A-Z][A-Za-z\s]*",
+            
+            # Container patterns (italicized journals, websites, etc.)
+            "container_italics": r"\*[A-Z][A-Za-z\s&:,-]+\*",
+            "container_name": r"[A-Z][A-Za-z\s&:,-]+[A-Za-z]",
+            
+            # Date patterns (MLA: Day Month Year format)
+            "full_date": r"\d{1,2}\s+[A-Za-z]+\s+\d{4}",  # 15 May 2020
+            "month_year": r"[A-Za-z]+\s+\d{4}",  # May 2020
+            "year_only": r"\d{4}",  # 2020
+            
+            # Page and location patterns
+            "page_range": r"pp\.\s*\d+[-–]\d+",
+            "single_page": r"p\.\s*\d+",
+            "no_prefix_pages": r"\d+[-–]\d+",
+            "volume_issue": r"vol\.\s*\d+,\s*no\.\s*\d+",
+            
+            # Web and digital patterns
+            "url_pattern": r"https?://[^\s,]+",
+            "doi_pattern": r"doi:10\.\d+/[^\s]+",
+            "accessed_date": r"Accessed\s+\d{1,2}\s+[A-Za-z]+\s+\d{4}",
+            
+            # Complete citation patterns for different types
+            "journal_article": r"^[A-Z][a-z]+.*\.\s*\"[^\"]+\.?\"\s*\*[^*]+\*.*\d{4}.*pp?\.\s*\d+",
+            "book_citation": r"^[A-Z][a-z]+.*\.\s*\*[^*]+\*\.",
+            "web_source": r"^[A-Z][a-z]+.*\.\s*\"[^\"]+\.?\".*\d{4}.*[Ww]eb",
+            
+            # Structure patterns
+            "proper_ending": r"\.$",
+            "double_spaces": r"\s{2,}",
+            "title_in_quotes": r'"[^"]+"',
+            "container_in_italics": r"\*[^*]+\*"
+        }
+    
+    def validate(self, citations: List[str]) -> FormatValidationResult:
+        """
+        Validate a list of citations against MLA 8th Edition format.
         
         Args:
-            citation: The citation string to validate
+            citations: List of citation strings to validate
             
         Returns:
-            ValidationResult containing validation status and details
+            FormatValidationResult with comprehensive validation details
         """
-        if not citation or not citation.strip():
-            return ValidationResult(
+        start_time = time.time()
+        
+        if not citations:
+            return FormatValidationResult(
+                format_name=self.format_name,
                 is_valid=False,
                 confidence=0.0,
-                errors=[ValidationError(
-                    message="Empty citation provided",
-                    severity=ValidationSeverity.CRITICAL
-                )],
-                warnings=[]
+                errors=["No citations provided"],
+                total_citations=0,
+                valid_citations=0,
+                processed_citations=0,
+                processing_time_ms=0.0
             )
         
-        citation = citation.strip()
-        errors = []
-        warnings = []
+        validation_results = []
+        all_errors = []
+        all_warnings = []
+        all_suggestions = []
+        all_evidence = []
         
-        # Extract components
-        components = self._extract_components(citation)
+        format_errors = []
+        structure_errors = []
+        content_errors = []
         
-        # Validate required fields
-        errors.extend(self._validate_required_fields(components))
+        valid_count = 0
         
-        # Validate individual components
-        errors.extend(self._validate_author(components.get('author', '')))
-        errors.extend(self._validate_title(components.get('title', '')))
-        errors.extend(self._validate_container(components.get('container', '')))
-        
-        # Validate optional fields if present
-        if 'publication_date' in components:
-            errors.extend(self._validate_date(components['publication_date']))
-        
-        if 'location' in components:
-            errors.extend(self._validate_pages(components['location']))
-        
-        if 'url' in components:
-            errors.extend(self._validate_url(components['url']))
-        
-        # Validate overall structure
-        structure_errors = self._validate_structure(citation)
-        errors.extend(structure_errors)
-        
-        # Generate warnings for style issues
-        style_warnings = self._check_style_issues(citation, components)
-        warnings.extend(style_warnings)
+        for i, citation in enumerate(citations):
+            if not citation.strip():
+                structure_errors.append(f"Citation {i+1}: Empty citation")
+                validation_results.append((False, [f"Citation {i+1} is empty"], []))
+                continue
+            
+            # Validate single citation
+            is_valid, errors, evidence = self.validate_single_citation(citation)
+            validation_results.append((is_valid, errors, evidence))
+            
+            if is_valid:
+                valid_count += 1
+            else:
+                # Categorize errors
+                for error in errors:
+                    if any(keyword in error.lower() for keyword in ["format", "pattern", "style"]):
+                        format_errors.append(f"Citation {i+1}: {error}")
+                    elif any(keyword in error.lower() for keyword in ["structure", "order", "missing"]):
+                        structure_errors.append(f"Citation {i+1}: {error}")
+                    else:
+                        content_errors.append(f"Citation {i+1}: {error}")
+            
+            all_errors.extend([f"Citation {i+1}: {error}" for error in errors])
+            all_evidence.extend(evidence)
+            
+            # Generate citation-specific suggestions
+            if errors:
+                citation_suggestions = self.generate_suggestions(errors)
+                all_suggestions.extend([f"Citation {i+1}: {suggestion}" for suggestion in citation_suggestions])
         
         # Calculate confidence
-        confidence = self._calculate_mla_confidence(citation, components, errors)
+        confidence = self.calculate_confidence(validation_results)
         
-        is_valid = len([e for e in errors if e.severity == ValidationSeverity.CRITICAL]) == 0
+        # Generate overall warnings
+        if confidence < 0.5:
+            all_warnings.append("Low overall confidence - many citations may not follow MLA format")
+        elif confidence < 0.8:
+            all_warnings.append("Medium confidence - some citations may need formatting improvements")
         
-        return ValidationResult(
-            is_valid=is_valid,
+        # Processing time
+        processing_time = (time.time() - start_time) * 1000
+        
+        return FormatValidationResult(
+            format_name=self.format_name,
+            is_valid=len(all_errors) == 0,
             confidence=confidence,
-            errors=errors,
-            warnings=warnings,
-            metadata={
-                'format': 'MLA',
-                'components_found': list(components.keys()),
-                'citation_length': len(citation)
-            }
+            errors=all_errors,
+            warnings=all_warnings,
+            suggestions=all_suggestions,
+            evidence=all_evidence,
+            total_citations=len(citations),
+            valid_citations=valid_count,
+            processed_citations=len([c for c in citations if c.strip()]),
+            format_errors=format_errors,
+            structure_errors=structure_errors,
+            content_errors=content_errors,
+            processing_time_ms=processing_time
         )
     
-    def _extract_components(self, citation: str) -> Dict[str, str]:
+    def _validate_format_specific(self, citation: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
         """
-        Extract citation components from MLA citation string.
+        MLA-specific validation logic.
         
         Args:
-            citation: The citation string to parse
+            citation: Single citation string to validate
             
         Returns:
-            Dictionary mapping component names to extracted values
+            Tuple of (is_valid, errors, evidence)
         """
-        components = super()._extract_components(citation)
+        errors = []
+        evidence = []
         
-        # MLA format: Author. "Title." Container, Publication Date, Location.
-        # Split by periods and quotes to identify components
-        parts = []
-        current_part = ""
-        in_quotes = False
+        # Detect citation type
+        citation_type = self._detect_citation_type(citation)
         
-        for char in citation:
-            if char == '"' and not in_quotes:
-                in_quotes = True
-                current_part += char
-            elif char == '"' and in_quotes:
-                in_quotes = False
-                current_part += char
-            elif char == '.' and not in_quotes:
-                if current_part.strip():
-                    parts.append(current_part.strip())
-                current_part = ""
-            else:
-                current_part += char
+        # Extract and validate components
+        components = self._extract_citation_components(citation)
         
-        if current_part.strip():
-            parts.append(current_part.strip())
+        # Validate author format
+        author_valid, author_errors, author_evidence = self._validate_author_format(citation, components)
+        errors.extend(author_errors)
+        evidence.extend(author_evidence)
         
-        # Try to identify components
-        if parts:
-            # First part is typically the author
-            if not parts[0].startswith('"'):
-                components['author'] = parts[0].strip()
-                parts = parts[1:]
+        # Validate title format
+        title_valid, title_errors, title_evidence = self._validate_title_format(citation, components, citation_type)
+        errors.extend(title_errors)
+        evidence.extend(title_evidence)
         
-        # Look for quoted title
-        for i, part in enumerate(parts):
-            if part.startswith('"') and part.endswith('"'):
-                components['title'] = part[1:-1]  # Remove quotes
-                parts = parts[:i] + parts[i+1:]
-                break
+        # Validate container format
+        container_valid, container_errors, container_evidence = self._validate_container_format(citation, components, citation_type)
+        errors.extend(container_errors)
+        evidence.extend(container_evidence)
         
-        # Remaining parts contain container, date, location
-        remaining = ' '.join(parts)
+        # Validate publication info
+        pub_valid, pub_errors, pub_evidence = self._validate_publication_info(citation, components, citation_type)
+        errors.extend(pub_errors)
+        evidence.extend(pub_evidence)
         
-        # Extract container (typically italicized, but we'll look for comma-separated elements)
-        container_match = re.search(r'^([^,]+)', remaining)
+        # Validate structure
+        structure_valid, structure_errors, structure_evidence = self._validate_structure(citation)
+        errors.extend(structure_errors)
+        evidence.extend(structure_evidence)
+        
+        # Overall validity
+        is_valid = (author_valid and title_valid and container_valid and 
+                   pub_valid and structure_valid and len(errors) == 0)
+        
+        # Add type detection evidence
+        if citation_type != "unknown":
+            evidence.append(ValidationEvidence(
+                pattern_matched=citation_type,
+                confidence_score=0.8,
+                rule_applied="citation_type_detection",
+                context={"detected_type": citation_type}
+            ))
+        
+        return is_valid, errors, evidence
+    
+    def _detect_citation_type(self, citation: str) -> str:
+        """Detect the type of citation (journal, book, web, etc.)."""
+        if citation in self._citation_type_cache:
+            return self._citation_type_cache[citation]
+        
+        citation_lower = citation.lower()
+        
+        # Journal article indicators
+        if ('"' in citation and '*' in citation and 
+            any(indicator in citation_lower for indicator in ["vol.", "volume", "pp.", "no."])):
+            citation_type = "journal_article"
+        # Book indicators
+        elif ('*' in citation and 
+              any(indicator in citation_lower for indicator in ["publisher", "press", "university"])):
+            citation_type = "book"
+        # Web source indicators
+        elif (any(indicator in citation_lower for indicator in ["web", "accessed", "http", "www."])):
+            citation_type = "web_source"
+        # Newspaper/magazine indicators
+        elif (any(indicator in citation_lower for indicator in ["times", "post", "magazine", "news"])):
+            citation_type = "newspaper"
+        else:
+            citation_type = "unknown"
+        
+        self._citation_type_cache[citation] = citation_type
+        return citation_type
+    
+    def _extract_citation_components(self, citation: str) -> Dict[str, Optional[str]]:
+        """Extract key components from a citation."""
+        components = {
+            "author": None,
+            "title": None,
+            "container": None,
+            "date": None,
+            "pages": None,
+            "url": None,
+            "access_date": None
+        }
+        
+        # Extract title in quotes
+        title_match = re.search(r'"([^"]+)"', citation)
+        if title_match:
+            components["title"] = title_match.group(1)
+        
+        # Extract container in italics (represented by asterisks)
+        container_match = re.search(r'\*([^*]+)\*', citation)
         if container_match:
-            potential_container = container_match.group(1).strip()
-            if len(potential_container) > 3:
-                components['container'] = potential_container
-        
-        # Extract date
-        date_match = re.search(r'(\d{1,2}\s+[A-Za-z]+\s+\d{4}|\d{4})', remaining)
-        if date_match:
-            components['publication_date'] = date_match.group(1)
-        
-        # Extract page information
-        page_match = re.search(r'(pp?\.\s*\d+[-–]?\d*)', remaining)
-        if page_match:
-            components['location'] = page_match.group(1)
+            components["container"] = container_match.group(1)
         
         # Extract URL
-        url_match = re.search(r'(https?:\/\/[^\s,]+)', remaining)
+        url_match = re.search(r'(https?://[^\s,]+)', citation)
         if url_match:
-            components['url'] = url_match.group(1)
+            components["url"] = url_match.group(1)
+        
+        # Extract date (various formats)
+        date_match = re.search(r'(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4})', citation)
+        if date_match:
+            components["date"] = date_match.group(1)
+        
+        # Extract access date
+        access_match = re.search(r'Accessed\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})', citation)
+        if access_match:
+            components["access_date"] = access_match.group(1)
+        
+        # Extract page information
+        page_match = re.search(r'(pp?\.\s*\d+[-–]?\d*)', citation)
+        if page_match:
+            components["pages"] = page_match.group(1)
         
         return components
     
-    def _validate_author(self, author: str) -> List[ValidationError]:
-        """Validate author format according to MLA guidelines."""
+    def _validate_author_format(self, citation: str, components: Dict[str, Optional[str]]) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate author formatting."""
         errors = []
+        evidence = []
         
-        if not author:
-            return errors  # Handled by required field validation
+        # Check for basic author pattern
+        single_author = self.get_compiled_pattern("single_author")
+        multiple_authors = self.get_compiled_pattern("multiple_authors")
+        et_al = self.get_compiled_pattern("et_al")
+        corporate = self.get_compiled_pattern("corporate_author")
         
-        # Check for basic author format
-        valid_format = False
-        for pattern_name, pattern in self.author_patterns.items():
-            if re.match(pattern, author):
-                valid_format = True
-                break
+        author_found = False
+        confidence = 0.0
         
-        if not valid_format:
-            errors.append(ValidationError(
-                message=f"Author format does not match MLA style: {author}",
-                severity=ValidationSeverity.MAJOR,
-                field='author',
-                suggestion="Use format: Last, First Middle, and Last, First Middle"
+        if single_author and single_author.match(citation):
+            author_found = True
+            confidence = 0.9
+            evidence.append(ValidationEvidence(
+                pattern_matched="single_author",
+                confidence_score=confidence,
+                rule_applied="author_format_validation",
+                context={"type": "single_author"}
+            ))
+        elif multiple_authors and multiple_authors.match(citation):
+            author_found = True
+            confidence = 0.85
+            evidence.append(ValidationEvidence(
+                pattern_matched="multiple_authors",
+                confidence_score=confidence,
+                rule_applied="author_format_validation",
+                context={"type": "multiple_authors"}
+            ))
+        elif et_al and et_al.search(citation):
+            author_found = True
+            confidence = 0.8
+            evidence.append(ValidationEvidence(
+                pattern_matched="et_al",
+                confidence_score=confidence,
+                rule_applied="author_format_validation",
+                context={"type": "et_al"}
+            ))
+        elif corporate and corporate.match(citation):
+            author_found = True
+            confidence = 0.75
+            evidence.append(ValidationEvidence(
+                pattern_matched="corporate_author",
+                confidence_score=confidence,
+                rule_applied="author_format_validation",
+                context={"type": "corporate_author"}
             ))
         
-        # Check for proper name format (MLA uses full first names)
-        if re.search(r'\b[A-Z]\.\s*[A-Z]\.', author):
-            errors.append(ValidationError(
-                message="MLA uses full first names, not initials",
-                severity=ValidationSeverity.MINOR,
-                field='author'
-            ))
+        if not author_found:
+            errors.append("Author format does not match MLA style (should be: Last, First Middle.)")
+            confidence = 0.0
         
-        # Check for 'and' instead of '&'
-        if '&' in author:
-            errors.append(ValidationError(
-                message="MLA uses 'and' instead of '&' between authors",
-                severity=ValidationSeverity.MINOR,
-                field='author'
-            ))
+        # Check for MLA-specific author issues
+        if re.search(r'\b[A-Z]\.\s*[A-Z]\.', citation):
+            errors.append("MLA uses full first names, not initials")
         
-        return errors
+        if ' & ' in citation:
+            errors.append("Use 'and' instead of '&' for multiple authors in MLA")
+        
+        return len(errors) == 0, errors, evidence
     
-    def _validate_title(self, title: str) -> List[ValidationError]:
-        """Validate title format according to MLA guidelines."""
+    def _validate_title_format(self, citation: str, components: Dict[str, Optional[str]], citation_type: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate title formatting based on citation type."""
         errors = []
+        evidence = []
         
-        if not title:
-            return errors  # Handled by required field validation
+        if citation_type in ["journal_article", "web_source", "newspaper"]:
+            # Articles should have titles in quotes
+            if '"' not in citation:
+                errors.append("Article titles should be in quotation marks")
+            else:
+                title_match = re.search(r'"([^"]+)"', citation)
+                if title_match:
+                    title = title_match.group(1)
+                    # Check title case (MLA uses title case)
+                    if title[0].isupper():
+                        evidence.append(ValidationEvidence(
+                            pattern_matched="title_case",
+                            confidence_score=0.8,
+                            rule_applied="title_format_validation",
+                            context={"title": title, "type": "article"}
+                        ))
+                    else:
+                        errors.append("Article title should start with capital letter")
         
-        # Check for title case (MLA requirement)
-        words = title.split()
-        if len(words) > 1:
-            # Check if most significant words are capitalized
-            significant_words = [w for w in words if len(w) > 3 or w.lower() not in ['a', 'an', 'the', 'and', 'or', 'but', 'for', 'nor', 'on', 'at', 'to', 'by', 'of', 'in']]
-            if significant_words:
-                capitalized_significant = sum(1 for w in significant_words if w[0].isupper())
-                if capitalized_significant / len(significant_words) < 0.8:
-                    errors.append(ValidationError(
-                        message="Title should use title case",
-                        severity=ValidationSeverity.MINOR,
-                        field='title',
-                        suggestion="Capitalize first word, last word, and all major words"
+        elif citation_type == "book":
+            # Books should have titles in italics (represented by asterisks)
+            if '*' not in citation:
+                errors.append("Book titles should be in italics")
+            else:
+                title_match = re.search(r'\*([^*]+)\*', citation)
+                if title_match:
+                    title = title_match.group(1)
+                    evidence.append(ValidationEvidence(
+                        pattern_matched="italicized_title",
+                        confidence_score=0.8,
+                        rule_applied="title_format_validation",
+                        context={"title": title, "type": "book"}
                     ))
         
-        return errors
+        return len(errors) == 0, errors, evidence
     
-    def _validate_container(self, container: str) -> List[ValidationError]:
-        """Validate container format according to MLA guidelines."""
+    def _validate_container_format(self, citation: str, components: Dict[str, Optional[str]], citation_type: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate container formatting."""
         errors = []
+        evidence = []
         
-        if not container:
-            return errors  # Handled by required field validation
+        # Check for container in italics
+        if components.get("container"):
+            evidence.append(ValidationEvidence(
+                pattern_matched="container_name",
+                confidence_score=0.8,
+                rule_applied="container_format_validation",
+                context={"container": components["container"]}
+            ))
+        else:
+            errors.append("Container (journal, website, etc.) not found or not properly formatted")
         
-        # Check basic container format
-        if not re.match(self.container_pattern, container):
-            errors.append(ValidationError(
-                message=f"Container format may be incorrect: {container}",
-                severity=ValidationSeverity.MINOR,
-                field='container'
+        # Check for proper italicization
+        if citation_type in ["journal_article", "book", "web_source"]:
+            if '*' not in citation:
+                errors.append("Container should be italicized (use asterisks)")
+        
+        return len(errors) == 0, errors, evidence
+    
+    def _validate_publication_info(self, citation: str, components: Dict[str, Optional[str]], citation_type: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate publication information."""
+        errors = []
+        evidence = []
+        
+        # Check for date information
+        if components.get("date"):
+            date_pattern = self.get_compiled_pattern("full_date")
+            if date_pattern and date_pattern.search(citation):
+                evidence.append(ValidationEvidence(
+                    pattern_matched="full_date",
+                    confidence_score=0.9,
+                    rule_applied="publication_info_validation",
+                    context={"date": components["date"]}
+                ))
+            else:
+                # Check other date formats
+                month_year = self.get_compiled_pattern("month_year")
+                year_only = self.get_compiled_pattern("year_only")
+                if month_year and month_year.search(citation):
+                    evidence.append(ValidationEvidence(
+                        pattern_matched="month_year",
+                        confidence_score=0.7,
+                        rule_applied="publication_info_validation",
+                        context={"date": components["date"]}
+                    ))
+                elif year_only and year_only.search(citation):
+                    evidence.append(ValidationEvidence(
+                        pattern_matched="year_only",
+                        confidence_score=0.6,
+                        rule_applied="publication_info_validation",
+                        context={"date": components["date"]}
+                    ))
+        
+        # Check for page information
+        if citation_type == "journal_article" and components.get("pages"):
+            evidence.append(ValidationEvidence(
+                pattern_matched="page_range",
+                confidence_score=0.7,
+                rule_applied="publication_info_validation",
+                context={"pages": components["pages"]}
             ))
         
-        return errors
+        # Check for web access date
+        if citation_type == "web_source":
+            if components.get("access_date"):
+                evidence.append(ValidationEvidence(
+                    pattern_matched="accessed_date",
+                    confidence_score=0.8,
+                    rule_applied="publication_info_validation",
+                    context={"access_date": components["access_date"]}
+                ))
+            elif components.get("url") and not components.get("access_date"):
+                errors.append("Web sources should include access date")
+        
+        return len(errors) == 0, errors, evidence
     
-    def _validate_date(self, date: str) -> List[ValidationError]:
-        """Validate date format according to MLA guidelines."""
-        errors = []
-        
-        if not date:
-            return errors
-        
-        # Check if date matches any valid pattern
-        valid_format = False
-        for pattern_name, pattern in self.date_patterns.items():
-            if re.match(pattern, date):
-                valid_format = True
-                break
-        
-        if not valid_format:
-            errors.append(ValidationError(
-                message=f"Date format should be 'Day Month Year' or 'Month Year' or 'Year': {date}",
-                severity=ValidationSeverity.MINOR,
-                field='publication_date'
-            ))
-        
-        return errors
-    
-    def _validate_pages(self, pages: str) -> List[ValidationError]:
-        """Validate page format according to MLA guidelines."""
-        errors = []
-        
-        if not pages:
-            return errors
-        
-        # Check if pages match any valid pattern
-        valid_format = False
-        for pattern_name, pattern in self.page_patterns.items():
-            if re.match(pattern, pages):
-                valid_format = True
-                break
-        
-        if not valid_format:
-            errors.append(ValidationError(
-                message=f"Page format should be 'pp. #-#' or 'p. #': {pages}",
-                severity=ValidationSeverity.MINOR,
-                field='location'
-            ))
-        
-        return errors
-    
-    def _validate_url(self, url: str) -> List[ValidationError]:
-        """Validate URL format according to MLA guidelines."""
-        errors = []
-        
-        if not url:
-            return errors
-        
-        if not re.match(self.url_pattern, url):
-            errors.append(ValidationError(
-                message=f"URL format is incorrect: {url}",
-                severity=ValidationSeverity.MINOR,
-                field='url'
-            ))
-        
-        return errors
-    
-    def _validate_structure(self, citation: str) -> List[ValidationError]:
+    def _validate_structure(self, citation: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
         """Validate overall citation structure."""
         errors = []
+        evidence = []
         
-        # Check for proper punctuation
-        if not citation.endswith('.'):
-            errors.append(ValidationError(
-                message="Citation should end with a period",
-                severity=ValidationSeverity.MINOR,
-                field='structure'
+        # Check for proper ending
+        if citation.endswith('.'):
+            evidence.append(ValidationEvidence(
+                pattern_matched="proper_ending",
+                confidence_score=0.6,
+                rule_applied="structure_validation",
+                context={"has_proper_ending": True}
             ))
-        
-        # Check for title in quotes
-        if '"' not in citation:
-            errors.append(ValidationError(
-                message="Article/chapter title should be in quotation marks",
-                severity=ValidationSeverity.MINOR,
-                field='structure'
-            ))
+        else:
+            errors.append("Citation should end with a period")
         
         # Check for double spaces
-        if '  ' in citation:
-            errors.append(ValidationError(
-                message="Citation contains double spaces",
-                severity=ValidationSeverity.MINOR,
-                field='structure'
-            ))
+        double_spaces = self.get_compiled_pattern("double_spaces")
+        if double_spaces and double_spaces.search(citation):
+            errors.append("Citation contains double spaces")
         
-        return errors
+        # Check for proper punctuation sequence
+        if re.search(r'[,;:]{2,}', citation):
+            errors.append("Citation contains improper punctuation sequence")
+        
+        return len(errors) == 0, errors, evidence
     
-    def _check_style_issues(self, citation: str, components: Dict[str, str]) -> List[ValidationError]:
-        """Check for common MLA style issues."""
-        warnings = []
+    def generate_suggestions(self, errors: List[str]) -> List[str]:
+        """Generate suggestions based on validation errors."""
+        suggestions = []
         
-        # Check for italicization indicators for container
-        if 'container' in components and components['container']:
-            if not any(indicator in citation for indicator in ['*', '_', '<em>', '<i>']):
-                warnings.append(ValidationError(
-                    message="Container (journal, website, etc.) should be italicized",
-                    severity=ValidationSeverity.WARNING,
-                    field='container'
-                ))
+        if any("author" in error.lower() for error in errors):
+            suggestions.append("Use format: Last, First Middle. for authors")
+            suggestions.append("Use 'and' instead of '&' between multiple authors")
         
-        # Check for date access for web sources
-        if 'url' in components and 'date_of_access' not in components:
-            warnings.append(ValidationError(
-                message="Web sources should include date of access",
-                severity=ValidationSeverity.WARNING,
-                field='date_of_access'
-            ))
+        if any("title" in error.lower() for error in errors):
+            suggestions.append("Put article titles in quotation marks")
+            suggestions.append("Italicize book and journal titles")
+            suggestions.append("Use title case for all titles")
         
-        return warnings
-    
-    def _calculate_mla_confidence(self, citation: str, components: Dict[str, str], errors: List[ValidationError]) -> float:
-        """Calculate confidence score specific to MLA format."""
-        base_confidence = self._calculate_base_confidence(citation, errors)
+        if any("container" in error.lower() for error in errors):
+            suggestions.append("Italicize container names (journals, websites, books)")
         
-        # Bonus points for having MLA-specific elements
-        mla_bonus = 0.0
+        if any("date" in error.lower() for error in errors):
+            suggestions.append("Use format: Day Month Year, Month Year, or Year")
+            suggestions.append("Include access date for web sources")
         
-        # Title in quotes
-        if '"' in citation:
-            mla_bonus += 0.1
+        if any("structure" in error.lower() for error in errors):
+            suggestions.append("End citation with a period")
+            suggestions.append("Check for proper punctuation throughout")
         
-        # Proper author format (full names)
-        if 'author' in components and not re.search(r'\b[A-Z]\.\s*[A-Z]\.', components['author']):
-            mla_bonus += 0.1
-        
-        # Container information
-        if 'container' in components:
-            mla_bonus += 0.1
-        
-        # Date information
-        if 'publication_date' in components:
-            mla_bonus += 0.05
-        
-        # Location (page) information
-        if 'location' in components:
-            mla_bonus += 0.05
-        
-        return min(1.0, base_confidence + mla_bonus)
+        return suggestions[:3]  # Return top 3 suggestions

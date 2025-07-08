@@ -1,570 +1,585 @@
 """
-IEEE citation format validation strategy.
+IEEE Citation Format Strategy Implementation
 
-This module implements the Strategy pattern for IEEE citation format validation 
-with comprehensive rule checking for technical publications.
+Comprehensive IEEE citation validation strategy following
+the Strategy pattern and providing detailed validation evidence.
 """
 
 import re
-from typing import Dict, List, Set
-from .base import CitationFormatStrategy, ValidationResult, ValidationError, ValidationSeverity
-from ..models import CitationStyle
+import time
+from typing import List, Dict, Any, Tuple, Optional
+
+from .base import (
+    CitationFormatStrategy, 
+    FormatValidationResult, 
+    ValidationEvidence,
+    ErrorSeverity
+)
 
 
-class IEEEStrategy(CitationFormatStrategy):
+class IEEEFormatStrategy(CitationFormatStrategy):
     """
     IEEE citation format validation strategy.
     
-    Implements validation rules for IEEE citation format commonly used
+    Provides comprehensive validation for IEEE-style citations commonly used
     in engineering and computer science publications.
     """
     
-    def __init__(self, strict_mode: bool = True):
-        """
-        Initialize IEEE citation strategy.
-        
-        Args:
-            strict_mode: Whether to apply strict IEEE validation rules
-        """
+    def __init__(self, strict_mode: bool = False):
         super().__init__(strict_mode)
-        self._setup_patterns()
+        self._citation_type_cache: Dict[str, str] = {}
     
     @property
     def format_name(self) -> str:
-        """Return the name of the citation format."""
         return "IEEE"
     
     @property
-    def citation_style(self) -> CitationStyle:
-        """Return the CitationStyle enum value."""
-        return CitationStyle.IEEE
+    def format_version(self) -> str:
+        return "IEEE Standard"
     
     @property
-    def required_fields(self) -> Set[str]:
-        """Return the set of required fields for IEEE citations."""
-        return {
-            'author',
-            'title',
-            'publication'  # Journal or conference
-        }
+    def supported_types(self) -> List[str]:
+        return [
+            "journal_article",
+            "conference_paper",
+            "book",
+            "book_chapter", 
+            "thesis",
+            "technical_report",
+            "patent",
+            "standard",
+            "web_source",
+            "manual"
+        ]
     
-    @property
-    def optional_fields(self) -> Set[str]:
-        """Return the set of optional fields for IEEE citations."""
-        return {
-            'volume',
-            'issue',
-            'pages',
-            'year',
-            'month',
-            'publisher',
-            'location',
-            'doi',
-            'url',
-            'accessed_date'
-        }
-    
-    def _setup_patterns(self):
-        """Set up regex patterns for IEEE validation."""
-        # Author patterns (IEEE uses initials)
-        self.author_patterns = {
-            'single_author': r'^[A-Z]\.\s*[A-Z]\.?\s*[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*$',
-            'multiple_authors': r'^[A-Z]\.\s*[A-Z]\.?\s*[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*(?:,\s*[A-Z]\.\s*[A-Z]\.?\s*[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*)*(?:,?\s*and\s*[A-Z]\.\s*[A-Z]\.?\s*[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*)?$',
-            'et_al': r'^[A-Z]\.\s*[A-Z]\.?\s*[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*(?:,\s*[A-Z]\.\s*[A-Z]\.?\s*[A-Z][a-z]+(?:[-\s][A-Z][a-z]+)*)*,?\s*et\s*al\.$'
-        }
-        
-        # Title patterns (IEEE uses quotes for article titles)
-        self.title_patterns = {
-            'quoted_title': r'^"[^"]+[.!?]?"$',
-            'title_case': r'^[A-Z][A-Za-z\s]*(?:[A-Z][A-Za-z\s]*)*$'
-        }
-        
-        # Publication patterns (journal or conference)
-        self.publication_patterns = {
-            'journal': r'^[A-Z][A-Za-z\s&.,-]+$',
-            'conference': r'^(?:Proc\.|Proceedings)\s+[A-Za-z\s&.,-]+$',
-            'abbreviated': r'^[A-Z]{2,}[A-Za-z\s&.,-]*$'  # For abbreviated journal names
-        }
-        
-        # Volume and issue patterns
-        self.volume_pattern = r'^vol\.\s*\d+$'
-        self.issue_pattern = r'^no\.\s*\d+$'
-        
-        # Pages patterns
-        self.pages_patterns = {
-            'range': r'^pp\.\s*\d+[-–]\d+$',
-            'single': r'^p\.\s*\d+$',
-            'article_number': r'^Art\.\s*no\.\s*\d+$'
-        }
-        
-        # Date patterns
-        self.date_patterns = {
-            'month_year': r'^[A-Z][a-z]{2,8}\s+\d{4}$',  # Jan. 2020
-            'year_only': r'^\d{4}$'
-        }
-        
-        # DOI pattern
-        self.doi_pattern = r'^doi:\s*10\.\d{4,}\/[-._;()\/:a-zA-Z0-9]+$'
-        
-        # URL pattern
-        self.url_pattern = r'^(?:Available:\s*)?https?:\/\/[^\s]+$'
-    
-    def validate_single_citation(self, citation: str) -> ValidationResult:
+    def get_validation_patterns(self) -> Dict[str, str]:
         """
-        Validate a single IEEE citation string.
+        Comprehensive IEEE citation regex patterns.
+        
+        Returns:
+            Dictionary of pattern names to regex strings
+        """
+        return {
+            # Author patterns (IEEE uses initials)
+            "single_author": r"^[A-Z]\.\s*[A-Z]?\.\s*[A-Z][a-z]+",
+            "multiple_authors": r"^[A-Z]\.\s*[A-Z]?\.\s*[A-Z][a-z]+(?:,\s*[A-Z]\.\s*[A-Z]?\.\s*[A-Z][a-z]+)*",
+            "et_al": r"[A-Z]\.\s*[A-Z]?\.\s*[A-Z][a-z]+\s*et\s*al\.",
+            "corporate_author": r"^[A-Z][A-Za-z\s&,\.]+",
+            
+            # Title patterns (IEEE uses quotes for articles, italics for books)
+            "article_title_quotes": r'"[^"]+\.?"',
+            "book_title_italics": r"\*[^*]+\*",
+            "sentence_case": r"[A-Z][a-z][^.]*",
+            
+            # Journal/conference patterns
+            "journal_name_italics": r"\*[A-Z][^*]+\*",
+            "conference_name": r"[A-Z][A-Za-z\s&]+(Conference|Symposium|Workshop)",
+            "abbreviated_journal": r"\*[A-Z][A-Za-z\.\s]+\*",
+            
+            # Volume/issue/page patterns
+            "volume_issue_pages": r"vol\.\s*\d+,\s*no\.\s*\d+,\s*pp\.\s*\d+[-–]\d+",
+            "volume_pages": r"vol\.\s*\d+,\s*pp\.\s*\d+[-–]\d+",
+            "page_range": r"pp\.\s*\d+[-–]\d+",
+            "single_page": r"p\.\s*\d+",
+            
+            # Date patterns (IEEE: Month Year or Year)
+            "month_year": r"[A-Z][a-z]+\.?\s+\d{4}",
+            "year_only": r"\d{4}",
+            "month_abbreviated": r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d{4}",
+            
+            # Technical patterns
+            "doi_pattern": r"doi:\s*10\.\d+/[^\s]+",
+            "url_pattern": r"https?://[^\s,]+",
+            "tech_report": r"Tech\.\s*Rep\.",
+            "patent_number": r"U\.S\.\s*Patent\s+\d+",
+            
+            # Complete citation patterns
+            "journal_article": r"^[A-Z]\.\s*[A-Z]?\.\s*[A-Z][a-z]+.*\"[^\"]+\".*\*[^*]+\*.*vol\.\s*\d+.*\d{4}",
+            "conference_paper": r"^[A-Z]\.\s*[A-Z]?\.\s*[A-Z][a-z]+.*\"[^\"]+\".*[Cc]onf\.",
+            "book_citation": r"^[A-Z]\.\s*[A-Z]?\.\s*[A-Z][a-z]+.*\*[^*]+\*.*\d{4}",
+            
+            # Structure patterns
+            "proper_ending": r"\.$",
+            "double_spaces": r"\s{2,}",
+            "numbered_reference": r"^\[\d+\]",
+            "in_text_citation": r"\[\d+\]"
+        }
+    
+    def validate(self, citations: List[str]) -> FormatValidationResult:
+        """
+        Validate a list of citations against IEEE format.
         
         Args:
-            citation: The citation string to validate
+            citations: List of citation strings to validate
             
         Returns:
-            ValidationResult containing validation status and details
+            FormatValidationResult with comprehensive validation details
         """
-        if not citation or not citation.strip():
-            return ValidationResult(
+        start_time = time.time()
+        
+        if not citations:
+            return FormatValidationResult(
+                format_name=self.format_name,
                 is_valid=False,
                 confidence=0.0,
-                errors=[ValidationError(
-                    message="Empty citation provided",
-                    severity=ValidationSeverity.CRITICAL
-                )],
-                warnings=[]
+                errors=["No citations provided"],
+                total_citations=0,
+                valid_citations=0,
+                processed_citations=0,
+                processing_time_ms=0.0
             )
         
-        citation = citation.strip()
-        errors = []
-        warnings = []
+        validation_results = []
+        all_errors = []
+        all_warnings = []
+        all_suggestions = []
+        all_evidence = []
         
-        # Extract components
-        components = self._extract_components(citation)
+        format_errors = []
+        structure_errors = []
+        content_errors = []
         
-        # Validate required fields
-        errors.extend(self._validate_required_fields(components))
+        valid_count = 0
         
-        # Validate individual components
-        errors.extend(self._validate_author(components.get('author', '')))
-        errors.extend(self._validate_title(components.get('title', '')))
-        errors.extend(self._validate_publication(components.get('publication', '')))
-        
-        # Validate optional fields if present
-        if 'volume' in components:
-            errors.extend(self._validate_volume(components['volume']))
-        
-        if 'issue' in components:
-            errors.extend(self._validate_issue(components['issue']))
-        
-        if 'pages' in components:
-            errors.extend(self._validate_pages(components['pages']))
-        
-        if 'year' in components:
-            errors.extend(self._validate_year(components['year']))
-        
-        if 'doi' in components:
-            errors.extend(self._validate_doi(components['doi']))
-        
-        if 'url' in components:
-            errors.extend(self._validate_url(components['url']))
-        
-        # Validate overall structure
-        structure_errors = self._validate_structure(citation)
-        errors.extend(structure_errors)
-        
-        # Generate warnings for style issues
-        style_warnings = self._check_style_issues(citation, components)
-        warnings.extend(style_warnings)
+        for i, citation in enumerate(citations):
+            if not citation.strip():
+                structure_errors.append(f"Citation {i+1}: Empty citation")
+                validation_results.append((False, [f"Citation {i+1} is empty"], []))
+                continue
+            
+            # Validate single citation
+            is_valid, errors, evidence = self.validate_single_citation(citation)
+            validation_results.append((is_valid, errors, evidence))
+            
+            if is_valid:
+                valid_count += 1
+            else:
+                # Categorize errors
+                for error in errors:
+                    if any(keyword in error.lower() for keyword in ["format", "pattern", "style"]):
+                        format_errors.append(f"Citation {i+1}: {error}")
+                    elif any(keyword in error.lower() for keyword in ["structure", "order", "missing"]):
+                        structure_errors.append(f"Citation {i+1}: {error}")
+                    else:
+                        content_errors.append(f"Citation {i+1}: {error}")
+            
+            all_errors.extend([f"Citation {i+1}: {error}" for error in errors])
+            all_evidence.extend(evidence)
+            
+            # Generate citation-specific suggestions
+            if errors:
+                citation_suggestions = self.generate_suggestions(errors)
+                all_suggestions.extend([f"Citation {i+1}: {suggestion}" for suggestion in citation_suggestions])
         
         # Calculate confidence
-        confidence = self._calculate_ieee_confidence(citation, components, errors)
+        confidence = self.calculate_confidence(validation_results)
         
-        is_valid = len([e for e in errors if e.severity == ValidationSeverity.CRITICAL]) == 0
+        # Generate overall warnings
+        if confidence < 0.5:
+            all_warnings.append("Low overall confidence - many citations may not follow IEEE format")
+        elif confidence < 0.8:
+            all_warnings.append("Medium confidence - some citations may need formatting improvements")
         
-        return ValidationResult(
-            is_valid=is_valid,
+        # Processing time
+        processing_time = (time.time() - start_time) * 1000
+        
+        return FormatValidationResult(
+            format_name=self.format_name,
+            is_valid=len(all_errors) == 0,
             confidence=confidence,
-            errors=errors,
-            warnings=warnings,
-            metadata={
-                'format': 'IEEE',
-                'components_found': list(components.keys()),
-                'citation_length': len(citation)
-            }
+            errors=all_errors,
+            warnings=all_warnings,
+            suggestions=all_suggestions,
+            evidence=all_evidence,
+            total_citations=len(citations),
+            valid_citations=valid_count,
+            processed_citations=len([c for c in citations if c.strip()]),
+            format_errors=format_errors,
+            structure_errors=structure_errors,
+            content_errors=content_errors,
+            processing_time_ms=processing_time
         )
     
-    def _extract_components(self, citation: str) -> Dict[str, str]:
+    def _validate_format_specific(self, citation: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
         """
-        Extract citation components from IEEE citation string.
+        IEEE-specific validation logic.
         
         Args:
-            citation: The citation string to parse
+            citation: Single citation string to validate
             
         Returns:
-            Dictionary mapping component names to extracted values
+            Tuple of (is_valid, errors, evidence)
         """
-        components = super()._extract_components(citation)
+        errors = []
+        evidence = []
         
-        # IEEE format: A. B. Author, "Title," Journal, vol. X, no. Y, pp. Z-Z, Month Year.
+        # Detect citation type
+        citation_type = self._detect_citation_type(citation)
         
-        # Find the first quoted string (title)
+        # Extract and validate components
+        components = self._extract_citation_components(citation)
+        
+        # Validate author format
+        author_valid, author_errors, author_evidence = self._validate_author_format(citation, components)
+        errors.extend(author_errors)
+        evidence.extend(author_evidence)
+        
+        # Validate title format
+        title_valid, title_errors, title_evidence = self._validate_title_format(citation, components, citation_type)
+        errors.extend(title_errors)
+        evidence.extend(title_evidence)
+        
+        # Validate publication info
+        pub_valid, pub_errors, pub_evidence = self._validate_publication_info(citation, components, citation_type)
+        errors.extend(pub_errors)
+        evidence.extend(pub_evidence)
+        
+        # Validate technical details
+        tech_valid, tech_errors, tech_evidence = self._validate_technical_details(citation, components, citation_type)
+        errors.extend(tech_errors)
+        evidence.extend(tech_evidence)
+        
+        # Validate structure
+        structure_valid, structure_errors, structure_evidence = self._validate_structure(citation)
+        errors.extend(structure_errors)
+        evidence.extend(structure_evidence)
+        
+        # Overall validity
+        is_valid = (author_valid and title_valid and pub_valid and 
+                   tech_valid and structure_valid and len(errors) == 0)
+        
+        # Add type detection evidence
+        if citation_type != "unknown":
+            evidence.append(ValidationEvidence(
+                pattern_matched=citation_type,
+                confidence_score=0.8,
+                rule_applied="citation_type_detection",
+                context={"detected_type": citation_type}
+            ))
+        
+        return is_valid, errors, evidence
+    
+    def _detect_citation_type(self, citation: str) -> str:
+        """Detect the type of citation (journal, conference, book, etc.)."""
+        if citation in self._citation_type_cache:
+            return self._citation_type_cache[citation]
+        
+        citation_lower = citation.lower()
+        
+        # Conference paper indicators
+        if any(indicator in citation_lower for indicator in ["conf.", "proc.", "symposium", "workshop"]):
+            citation_type = "conference_paper"
+        # Journal article indicators
+        elif ('"' in citation and '*' in citation and 
+              any(indicator in citation_lower for indicator in ["vol.", "no.", "pp."])):
+            citation_type = "journal_article"
+        # Technical report indicators
+        elif any(indicator in citation_lower for indicator in ["tech. rep.", "technical report"]):
+            citation_type = "technical_report"
+        # Patent indicators
+        elif any(indicator in citation_lower for indicator in ["patent", "u.s. patent"]):
+            citation_type = "patent"
+        # Book indicators
+        elif ('*' in citation and not '"' in citation):
+            citation_type = "book"
+        # Web source indicators
+        elif any(indicator in citation_lower for indicator in ["http", "www.", "url"]):
+            citation_type = "web_source"
+        else:
+            citation_type = "unknown"
+        
+        self._citation_type_cache[citation] = citation_type
+        return citation_type
+    
+    def _extract_citation_components(self, citation: str) -> Dict[str, Optional[str]]:
+        """Extract key components from a citation."""
+        components = {
+            "author": None,
+            "title": None,
+            "journal": None,
+            "volume": None,
+            "issue": None,
+            "pages": None,
+            "year": None,
+            "doi": None,
+            "url": None
+        }
+        
+        # Extract title in quotes
         title_match = re.search(r'"([^"]+)"', citation)
         if title_match:
-            title_end = title_match.end()
-            author_part = citation[:title_match.start()].strip()
-            if author_part.endswith(','):
-                author_part = author_part[:-1].strip()
-            components['author'] = author_part
-            components['title'] = title_match.group(1)
-            
-            # Extract remaining components after title
-            rest = citation[title_end:].strip()
-            if rest.startswith(','):
-                rest = rest[1:].strip()
-            
-            # Split by commas to get publication info
-            parts = [part.strip() for part in rest.split(',')]
-            
-            if parts:
-                # First part is usually the publication (journal/conference)
-                if parts[0] and not parts[0].startswith('vol.') and not parts[0].startswith('pp.'):
-                    components['publication'] = parts[0]
-                    parts = parts[1:]
-                
-                # Look for volume, issue, pages, date
-                for part in parts:
-                    if part.startswith('vol.'):
-                        components['volume'] = part
-                    elif part.startswith('no.'):
-                        components['issue'] = part
-                    elif part.startswith('pp.'):
-                        components['pages'] = part
-                    elif part.startswith('Art. no.'):
-                        components['pages'] = part
-                    elif re.match(r'^[A-Z][a-z]{2,8}\s+\d{4}$', part):
-                        components['month_year'] = part
-                        year_match = re.search(r'\d{4}', part)
-                        if year_match:
-                            components['year'] = year_match.group()
-                    elif re.match(r'^\d{4}$', part):
-                        components['year'] = part
-                    elif part.startswith('doi:'):
-                        components['doi'] = part
-                    elif part.startswith('http') or part.startswith('Available:'):
-                        components['url'] = part
+            components["title"] = title_match.group(1)
+        
+        # Extract journal/publication in italics
+        journal_match = re.search(r'\*([^*]+)\*', citation)
+        if journal_match:
+            components["journal"] = journal_match.group(1)
+        
+        # Extract volume, issue, pages
+        vol_issue_pages = re.search(r'vol\.\s*(\d+),\s*no\.\s*(\d+),\s*pp\.\s*(\d+[-–]\d+)', citation)
+        if vol_issue_pages:
+            components["volume"] = vol_issue_pages.group(1)
+            components["issue"] = vol_issue_pages.group(2)
+            components["pages"] = vol_issue_pages.group(3)
+        else:
+            # Try volume and pages only
+            vol_pages = re.search(r'vol\.\s*(\d+),\s*pp\.\s*(\d+[-–]\d+)', citation)
+            if vol_pages:
+                components["volume"] = vol_pages.group(1)
+                components["pages"] = vol_pages.group(2)
+        
+        # Extract year
+        year_match = re.search(r'(\d{4})', citation)
+        if year_match:
+            components["year"] = year_match.group(1)
+        
+        # Extract DOI
+        doi_match = re.search(r'doi:\s*(10\.\d+/[^\s]+)', citation)
+        if doi_match:
+            components["doi"] = doi_match.group(1)
+        
+        # Extract URL
+        url_match = re.search(r'(https?://[^\s,]+)', citation)
+        if url_match:
+            components["url"] = url_match.group(1)
         
         return components
     
-    def _validate_author(self, author: str) -> List[ValidationError]:
-        """Validate author format according to IEEE guidelines."""
+    def _validate_author_format(self, citation: str, components: Dict[str, Optional[str]]) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate author formatting."""
         errors = []
+        evidence = []
         
-        if not author:
-            return errors  # Handled by required field validation
+        # Check for basic author pattern (IEEE uses initials)
+        single_author = self.get_compiled_pattern("single_author")
+        multiple_authors = self.get_compiled_pattern("multiple_authors")
+        et_al = self.get_compiled_pattern("et_al")
+        corporate = self.get_compiled_pattern("corporate_author")
         
-        # Check for basic IEEE author format (initials)
-        valid_format = False
-        for pattern_name, pattern in self.author_patterns.items():
-            if re.match(pattern, author):
-                valid_format = True
-                break
+        author_found = False
+        confidence = 0.0
         
-        if not valid_format:
-            errors.append(ValidationError(
-                message=f"Author format does not match IEEE style: {author}",
-                severity=ValidationSeverity.MAJOR,
-                field='author',
-                suggestion="Use format: A. B. Last, C. D. Last, and E. F. Last"
+        if single_author and single_author.match(citation):
+            author_found = True
+            confidence = 0.9
+            evidence.append(ValidationEvidence(
+                pattern_matched="single_author",
+                confidence_score=confidence,
+                rule_applied="author_format_validation",
+                context={"type": "single_author"}
+            ))
+        elif multiple_authors and multiple_authors.match(citation):
+            author_found = True
+            confidence = 0.85
+            evidence.append(ValidationEvidence(
+                pattern_matched="multiple_authors",
+                confidence_score=confidence,
+                rule_applied="author_format_validation",
+                context={"type": "multiple_authors"}
+            ))
+        elif et_al and et_al.search(citation):
+            author_found = True
+            confidence = 0.8
+            evidence.append(ValidationEvidence(
+                pattern_matched="et_al",
+                confidence_score=confidence,
+                rule_applied="author_format_validation",
+                context={"type": "et_al"}
+            ))
+        elif corporate and corporate.match(citation):
+            author_found = True
+            confidence = 0.75
+            evidence.append(ValidationEvidence(
+                pattern_matched="corporate_author",
+                confidence_score=confidence,
+                rule_applied="author_format_validation",
+                context={"type": "corporate_author"}
             ))
         
-        # Check for full first names (IEEE prefers initials)
-        if re.search(r'\b[A-Z][a-z]{2,}\s+[A-Z][a-z]+', author):
-            errors.append(ValidationError(
-                message="IEEE style uses initials for first names",
-                severity=ValidationSeverity.MINOR,
-                field='author'
-            ))
+        if not author_found:
+            errors.append("Author format does not match IEEE style (should use initials: F. M. Last)")
+            confidence = 0.0
         
-        # Check for proper comma and "and" usage
-        if ' & ' in author:
-            errors.append(ValidationError(
-                message="IEEE uses 'and' instead of '&' between authors",
-                severity=ValidationSeverity.MINOR,
-                field='author'
-            ))
+        # Check for IEEE-specific author issues
+        if re.search(r'[A-Z][a-z]+,\s*[A-Z][a-z]+', citation):
+            errors.append("IEEE uses initials, not full first names")
         
-        return errors
+        return len(errors) == 0, errors, evidence
     
-    def _validate_title(self, title: str) -> List[ValidationError]:
-        """Validate title format according to IEEE guidelines."""
+    def _validate_title_format(self, citation: str, components: Dict[str, Optional[str]], citation_type: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate title formatting based on citation type."""
         errors = []
+        evidence = []
         
-        if not title:
-            return errors  # Handled by required field validation
-        
-        # IEEE titles should be in quotes (handled in extraction)
-        # Check for title case
-        words = title.split()
-        if len(words) > 1:
-            # Check if most significant words are capitalized
-            significant_words = [w for w in words if len(w) > 3 or w.lower() not in ['a', 'an', 'the', 'and', 'or', 'but', 'for', 'nor', 'on', 'at', 'to', 'by', 'of', 'in']]
-            if significant_words:
-                capitalized_significant = sum(1 for w in significant_words if w[0].isupper())
-                if capitalized_significant / len(significant_words) < 0.8:
-                    errors.append(ValidationError(
-                        message="Title should use title case",
-                        severity=ValidationSeverity.MINOR,
-                        field='title',
-                        suggestion="Capitalize first word, last word, and all major words"
+        if citation_type in ["journal_article", "conference_paper"]:
+            # Articles and papers should have titles in quotes
+            if '"' not in citation:
+                errors.append("Article/paper titles should be in quotation marks")
+            else:
+                title_match = re.search(r'"([^"]+)"', citation)
+                if title_match:
+                    title = title_match.group(1)
+                    evidence.append(ValidationEvidence(
+                        pattern_matched="article_title_quotes",
+                        confidence_score=0.8,
+                        rule_applied="title_format_validation",
+                        context={"title": title, "type": citation_type}
                     ))
         
-        return errors
+        elif citation_type == "book":
+            # Books should have titles in italics
+            if '*' not in citation:
+                errors.append("Book titles should be in italics")
+            else:
+                title_match = re.search(r'\*([^*]+)\*', citation)
+                if title_match:
+                    title = title_match.group(1)
+                    evidence.append(ValidationEvidence(
+                        pattern_matched="book_title_italics",
+                        confidence_score=0.8,
+                        rule_applied="title_format_validation",
+                        context={"title": title, "type": "book"}
+                    ))
+        
+        return len(errors) == 0, errors, evidence
     
-    def _validate_publication(self, publication: str) -> List[ValidationError]:
-        """Validate publication format according to IEEE guidelines."""
+    def _validate_publication_info(self, citation: str, components: Dict[str, Optional[str]], citation_type: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate publication information."""
         errors = []
+        evidence = []
         
-        if not publication:
-            return errors  # Handled by required field validation
-        
-        # Check if publication matches any valid pattern
-        valid_format = False
-        for pattern_name, pattern in self.publication_patterns.items():
-            if re.match(pattern, publication):
-                valid_format = True
-                break
-        
-        if not valid_format:
-            errors.append(ValidationError(
-                message=f"Publication format may be incorrect: {publication}",
-                severity=ValidationSeverity.MINOR,
-                field='publication',
-                suggestion="Use full journal name or standard abbreviation"
-            ))
-        
-        return errors
-    
-    def _validate_volume(self, volume: str) -> List[ValidationError]:
-        """Validate volume format according to IEEE guidelines."""
-        errors = []
-        
-        if not volume:
-            return errors
-        
-        if not re.match(self.volume_pattern, volume, re.IGNORECASE):
-            errors.append(ValidationError(
-                message=f"Volume should be formatted as 'vol. X': {volume}",
-                severity=ValidationSeverity.MINOR,
-                field='volume'
-            ))
-        
-        return errors
-    
-    def _validate_issue(self, issue: str) -> List[ValidationError]:
-        """Validate issue format according to IEEE guidelines."""
-        errors = []
-        
-        if not issue:
-            return errors
-        
-        if not re.match(self.issue_pattern, issue, re.IGNORECASE):
-            errors.append(ValidationError(
-                message=f"Issue should be formatted as 'no. X': {issue}",
-                severity=ValidationSeverity.MINOR,
-                field='issue'
-            ))
-        
-        return errors
-    
-    def _validate_pages(self, pages: str) -> List[ValidationError]:
-        """Validate pages format according to IEEE guidelines."""
-        errors = []
-        
-        if not pages:
-            return errors
-        
-        # Check if pages match any valid pattern
-        valid_format = False
-        for pattern_name, pattern in self.pages_patterns.items():
-            if re.match(pattern, pages, re.IGNORECASE):
-                valid_format = True
-                break
-        
-        if not valid_format:
-            errors.append(ValidationError(
-                message=f"Pages should be 'pp. X-Y' or 'Art. no. X': {pages}",
-                severity=ValidationSeverity.MINOR,
-                field='pages'
-            ))
-        
-        return errors
-    
-    def _validate_year(self, year: str) -> List[ValidationError]:
-        """Validate year format according to IEEE guidelines."""
-        errors = []
-        
-        if not year:
-            return errors
-        
-        # Check year format
-        if not re.match(r'^\d{4}$', year):
-            errors.append(ValidationError(
-                message=f"Year format should be YYYY: {year}",
-                severity=ValidationSeverity.MAJOR,
-                field='year'
-            ))
-        
-        # Check reasonable year range
-        try:
-            year_num = int(year)
-            if year_num < 1800 or year_num > 2030:
-                errors.append(ValidationError(
-                    message=f"Year seems unreasonable: {year}",
-                    severity=ValidationSeverity.MINOR,
-                    field='year'
+        if citation_type == "journal_article":
+            # Check for journal name in italics
+            if components.get("journal"):
+                evidence.append(ValidationEvidence(
+                    pattern_matched="journal_name_italics",
+                    confidence_score=0.8,
+                    rule_applied="publication_info_validation",
+                    context={"journal": components["journal"]}
                 ))
-        except ValueError:
-            pass  # Already caught by format check
-        
-        return errors
-    
-    def _validate_doi(self, doi: str) -> List[ValidationError]:
-        """Validate DOI format according to IEEE guidelines."""
-        errors = []
-        
-        if not doi:
-            return errors
-        
-        if not re.match(self.doi_pattern, doi):
-            errors.append(ValidationError(
-                message=f"DOI should be formatted as 'doi: 10.xxxx/xxx': {doi}",
-                severity=ValidationSeverity.MINOR,
-                field='doi'
-            ))
-        
-        return errors
-    
-    def _validate_url(self, url: str) -> List[ValidationError]:
-        """Validate URL format according to IEEE guidelines."""
-        errors = []
-        
-        if not url:
-            return errors
-        
-        if not re.match(self.url_pattern, url):
-            errors.append(ValidationError(
-                message=f"URL format is incorrect: {url}",
-                severity=ValidationSeverity.MINOR,
-                field='url'
-            ))
-        
-        return errors
-    
-    def _validate_structure(self, citation: str) -> List[ValidationError]:
-        """Validate overall citation structure."""
-        errors = []
-        
-        # Check for proper punctuation
-        if not citation.endswith('.'):
-            errors.append(ValidationError(
-                message="Citation should end with a period",
-                severity=ValidationSeverity.MINOR,
-                field='structure'
-            ))
-        
-        # Check for title in quotes
-        if '"' not in citation:
-            errors.append(ValidationError(
-                message="Article title should be in quotation marks",
-                severity=ValidationSeverity.MINOR,
-                field='structure'
-            ))
-        
-        # Check for double spaces
-        if '  ' in citation:
-            errors.append(ValidationError(
-                message="Citation contains double spaces",
-                severity=ValidationSeverity.MINOR,
-                field='structure'
-            ))
-        
-        # Check for proper comma usage
-        if citation.count(',') < 2:
-            errors.append(ValidationError(
-                message="IEEE citations typically have multiple comma-separated elements",
-                severity=ValidationSeverity.MINOR,
-                field='structure'
-            ))
-        
-        return errors
-    
-    def _check_style_issues(self, citation: str, components: Dict[str, str]) -> List[ValidationError]:
-        """Check for common IEEE style issues."""
-        warnings = []
-        
-        # Check for italicization indicators for journal names
-        if 'publication' in components and components['publication']:
-            if not any(indicator in citation for indicator in ['*', '_', '<em>', '<i>']):
-                warnings.append(ValidationError(
-                    message="Journal names should be italicized",
-                    severity=ValidationSeverity.WARNING,
-                    field='publication'
+            else:
+                errors.append("Journal name not found or not properly italicized")
+            
+            # Check for volume/issue/page information
+            if components.get("volume") and components.get("pages"):
+                evidence.append(ValidationEvidence(
+                    pattern_matched="volume_pages",
+                    confidence_score=0.9,
+                    rule_applied="publication_info_validation",
+                    context={"volume": components["volume"], "pages": components["pages"]}
                 ))
+            else:
+                errors.append("Volume and page information missing or improperly formatted")
+        
+        elif citation_type == "conference_paper":
+            # Check for conference name
+            if "conf" in citation.lower() or "proc" in citation.lower():
+                evidence.append(ValidationEvidence(
+                    pattern_matched="conference_name",
+                    confidence_score=0.7,
+                    rule_applied="publication_info_validation",
+                    context={"type": "conference"}
+                ))
+            else:
+                errors.append("Conference information not clearly indicated")
+        
+        # Check for year
+        if components.get("year"):
+            evidence.append(ValidationEvidence(
+                pattern_matched="year_only",
+                confidence_score=0.7,
+                rule_applied="publication_info_validation",
+                context={"year": components["year"]}
+            ))
+        else:
+            errors.append("Publication year not found")
+        
+        return len(errors) == 0, errors, evidence
+    
+    def _validate_technical_details(self, citation: str, components: Dict[str, Optional[str]], citation_type: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate technical aspects specific to IEEE format."""
+        errors = []
+        evidence = []
+        
+        # Check for DOI (encouraged in IEEE)
+        if components.get("doi"):
+            evidence.append(ValidationEvidence(
+                pattern_matched="doi_pattern",
+                confidence_score=0.8,
+                rule_applied="technical_validation",
+                context={"doi": components["doi"]}
+            ))
         
         # Check for proper abbreviations
-        if 'volume' in components and 'vol.' not in components['volume'].lower():
-            warnings.append(ValidationError(
-                message="Volume should be abbreviated as 'vol.'",
-                severity=ValidationSeverity.WARNING,
-                field='volume'
-            ))
+        if citation_type == "journal_article":
+            # IEEE encourages abbreviated journal names
+            if re.search(r'\b(IEEE|ACM|ASME|AIAA)\b', citation):
+                evidence.append(ValidationEvidence(
+                    pattern_matched="technical_abbreviation",
+                    confidence_score=0.7,
+                    rule_applied="technical_validation",
+                    context={"type": "standard_abbreviation"}
+                ))
         
-        if 'issue' in components and 'no.' not in components['issue'].lower():
-            warnings.append(ValidationError(
-                message="Issue should be abbreviated as 'no.'",
-                severity=ValidationSeverity.WARNING,
-                field='issue'
-            ))
-        
-        if 'pages' in components and 'pp.' not in components['pages'].lower() and 'art.' not in components['pages'].lower():
-            warnings.append(ValidationError(
-                message="Pages should be abbreviated as 'pp.' or use 'Art. no.' for article numbers",
-                severity=ValidationSeverity.WARNING,
-                field='pages'
-            ))
-        
-        return warnings
+        return len(errors) == 0, errors, evidence
     
-    def _calculate_ieee_confidence(self, citation: str, components: Dict[str, str], errors: List[ValidationError]) -> float:
-        """Calculate confidence score specific to IEEE format."""
-        base_confidence = self._calculate_base_confidence(citation, errors)
+    def _validate_structure(self, citation: str) -> Tuple[bool, List[str], List[ValidationEvidence]]:
+        """Validate overall citation structure."""
+        errors = []
+        evidence = []
         
-        # Bonus points for having IEEE-specific elements
-        ieee_bonus = 0.0
+        # Check for proper ending
+        if citation.endswith('.'):
+            evidence.append(ValidationEvidence(
+                pattern_matched="proper_ending",
+                confidence_score=0.6,
+                rule_applied="structure_validation",
+                context={"has_proper_ending": True}
+            ))
+        else:
+            errors.append("Citation should end with a period")
         
-        # Title in quotes
-        if '"' in citation:
-            ieee_bonus += 0.1
+        # Check for double spaces
+        double_spaces = self.get_compiled_pattern("double_spaces")
+        if double_spaces and double_spaces.search(citation):
+            errors.append("Citation contains double spaces")
         
-        # Proper author format (initials)
-        if 'author' in components:
-            for pattern in self.author_patterns.values():
-                if re.match(pattern, components['author']):
-                    ieee_bonus += 0.1
-                    break
+        # IEEE specific: Check for numbered reference style (optional)
+        if re.match(r'^\[\d+\]', citation):
+            evidence.append(ValidationEvidence(
+                pattern_matched="numbered_reference",
+                confidence_score=0.5,
+                rule_applied="structure_validation",
+                context={"numbered_style": True}
+            ))
         
-        # IEEE-style abbreviations
-        if 'volume' in components and 'vol.' in components['volume'].lower():
-            ieee_bonus += 0.05
+        return len(errors) == 0, errors, evidence
+    
+    def generate_suggestions(self, errors: List[str]) -> List[str]:
+        """Generate suggestions based on validation errors."""
+        suggestions = []
         
-        if 'issue' in components and 'no.' in components['issue'].lower():
-            ieee_bonus += 0.05
+        if any("author" in error.lower() for error in errors):
+            suggestions.append("Use initials format: F. M. Last for authors")
+            suggestions.append("Separate multiple authors with commas")
         
-        if 'pages' in components and ('pp.' in components['pages'].lower() or 'art.' in components['pages'].lower()):
-            ieee_bonus += 0.05
+        if any("title" in error.lower() for error in errors):
+            suggestions.append("Put article/paper titles in quotation marks")
+            suggestions.append("Italicize book and journal titles")
         
-        # Publication information
-        if 'publication' in components:
-            ieee_bonus += 0.1
+        if any("journal" in error.lower() for error in errors):
+            suggestions.append("Italicize journal names")
+            suggestions.append("Use standard abbreviations when possible")
         
-        # Technical identifiers (DOI, etc.)
-        if 'doi' in components:
-            ieee_bonus += 0.05
+        if any("volume" in error.lower() or "page" in error.lower() for error in errors):
+            suggestions.append("Use format: vol. X, no. Y, pp. Z-W")
+            suggestions.append("Include volume and page information for journal articles")
         
-        return min(1.0, base_confidence + ieee_bonus)
+        if any("year" in error.lower() for error in errors):
+            suggestions.append("Include publication year")
+        
+        if any("structure" in error.lower() for error in errors):
+            suggestions.append("End citation with a period")
+            suggestions.append("Check for proper spacing throughout")
+        
+        return suggestions[:3]  # Return top 3 suggestions

@@ -425,9 +425,21 @@ class CitationFormatRegistry:
             from .apa_strategy import APAFormatStrategy
             self.register_strategy(APAFormatStrategy, priority=80)
             
-            # Register other strategies as they become available
-            # from .mla_strategy import MLAFormatStrategy
-            # self.register_strategy(MLAFormatStrategy, priority=70)
+            # Import and register MLA strategy
+            from .mla_strategy import MLAFormatStrategy
+            self.register_strategy(MLAFormatStrategy, priority=75)
+            
+            # Import and register IEEE strategy
+            from .ieee_strategy import IEEEFormatStrategy
+            self.register_strategy(IEEEFormatStrategy, priority=70)
+            
+            # Import and register Harvard strategy
+            from .harvard_strategy import HarvardFormatStrategy
+            self.register_strategy(HarvardFormatStrategy, priority=65)
+            
+            # Import and register Chicago strategy
+            from .chicago_strategy import ChicagoFormatStrategy
+            self.register_strategy(ChicagoFormatStrategy, priority=60)
             
             self._initialized = True
             
