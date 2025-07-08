@@ -1,7 +1,7 @@
 from typing import Dict, List
 from dataclasses import dataclass
 from academic_validation_framework.interfaces_v2 import ValidatorProtocol
-from academic_validation_framework.models import ResearchData, ValidationResult
+from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
 from academic_validation_framework.config import ValidationConfig
 
 @dataclass
@@ -41,7 +41,8 @@ class BiasDetector:
 
         return ValidationResult(
             validator_name="bias_detector",
-            passed=passed,
+            test_name="bias_detection_test",
+            status=ValidationStatus.PASSED if passed else ValidationStatus.FAILED,
             score=overall_score,
             details={
                 "bias_checks": [

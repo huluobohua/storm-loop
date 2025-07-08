@@ -1,7 +1,7 @@
 from typing import Dict, List, Any
 from dataclasses import dataclass
 from academic_validation_framework.interfaces_v2 import ValidatorProtocol
-from academic_validation_framework.models import ResearchData, ValidationResult
+from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
 from academic_validation_framework.config import ValidationConfig
 
 @dataclass
@@ -48,7 +48,8 @@ class EnhancedPRISMAValidator:
 
         return ValidationResult(
             validator_name="enhanced_prisma",
-            passed=passed,
+            test_name="prisma_compliance_test",
+            status=ValidationStatus.PASSED if passed else ValidationStatus.FAILED,
             score=overall_score,
             details={
                 "checkpoints": [

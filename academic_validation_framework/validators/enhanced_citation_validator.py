@@ -2,7 +2,7 @@ import re
 from typing import Dict, List, Tuple
 from dataclasses import dataclass
 from academic_validation_framework.interfaces_v2 import ValidatorProtocol
-from academic_validation_framework.models import ResearchData, ValidationResult
+from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
 from academic_validation_framework.config import ValidationConfig
 
 @dataclass
@@ -43,7 +43,8 @@ class EnhancedCitationValidator:
 
         return ValidationResult(
             validator_name="enhanced_citation",
-            passed=passed,
+            test_name="citation_accuracy_test",
+            status=ValidationStatus.PASSED if passed else ValidationStatus.FAILED,
             score=overall_score,
             details={
                 "formats_checked": len(self.supported_formats),
@@ -86,12 +87,16 @@ class EnhancedCitationValidator:
         valid_citations = 0
 
         for citation in citations:
-            # Basic APA format: Author, A. A. (Year). Title. Journal, Volume(Issue), pages.
-            apa_pattern = r'^[A-Z][a-z]+,\s[A-Z]\.\s[A-Z]\.\s\(\d{4}\)\.'
-            if re.match(apa_pattern, citation.strip()):
-                valid_citations += 1
+            # More flexible APA pattern: Check for author, year in parentheses, and period
+            if '(' in citation and ')' in citation and '.' in citation:
+                # Check if year is in parentheses
+                year_match = re.search(r'\(\d{4}\)', citation)
+                if year_match:
+                    valid_citations += 1
+                else:
+                    errors.append(f"Missing year in parentheses: {citation[:50]}...")
             else:
-                errors.append(f"Invalid APA format: {citation[:50]}...")
+                errors.append(f"Basic APA format missing: {citation[:50]}...")
 
         confidence = valid_citations / len(citations) if citations else 0.0
 
