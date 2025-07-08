@@ -3,6 +3,11 @@ from dataclasses import dataclass
 from academic_validation_framework.interfaces_v2 import ValidatorProtocol
 from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
 from academic_validation_framework.config import ValidationConfig
+from academic_validation_framework.config.validation_constants import ValidationConstants
+from academic_validation_framework.utils.input_validation import validate_input, InputValidator, ValidationError
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class PRISMACheckpoint:
@@ -18,53 +23,70 @@ class EnhancedPRISMAValidator:
 
     def __init__(self, config: 'ValidationConfig'):
         self.config = config
-        self.checkpoints = [
-            "protocol_registration",
-            "search_strategy",
-            "eligibility_criteria",
-            "information_sources",
-            "study_selection",
-            "data_extraction",
-            "risk_of_bias",
-            "synthesis_methods",
-            "reporting_bias",
-            "certainty_assessment",
-            "study_characteristics",
-            "results_synthesis"
-        ]
+        self.constants = ValidationConstants.PRISMA
+        self.checkpoints = self.constants.CHECKPOINTS
 
+    @validate_input
     async def validate(self, data: ResearchData) -> ValidationResult:
-        """Validate PRISMA compliance."""
-        checkpoints = []
-        total_score = 0.0
+        """Validate PRISMA compliance with comprehensive input validation."""
+        try:
+            # Additional validation specific to PRISMA
+            InputValidator.validate_research_data(data)
+            
+            checkpoints = []
+            total_score = 0.0
 
-        for checkpoint_name in self.checkpoints:
-            checkpoint = await self._validate_checkpoint(checkpoint_name, data)
-            checkpoints.append(checkpoint)
-            total_score += checkpoint.score
+            for checkpoint_name in self.checkpoints:
+                checkpoint = await self._validate_checkpoint(checkpoint_name, data)
+                checkpoints.append(checkpoint)
+                total_score += checkpoint.score
 
-        overall_score = total_score / len(self.checkpoints)
-        passed = overall_score >= self.config.prisma_compliance_threshold
+            overall_score = total_score / len(self.checkpoints)
+            passed = overall_score >= self.config.prisma_compliance_threshold
 
-        return ValidationResult(
-            validator_name="enhanced_prisma",
-            test_name="prisma_compliance_test",
-            status=ValidationStatus.PASSED if passed else ValidationStatus.FAILED,
-            score=overall_score,
-            details={
-                "checkpoints": [
-                    {
-                        "name": cp.name,
-                        "passed": cp.passed,
-                        "score": cp.score,
-                        "details": cp.details
-                    }
-                    for cp in checkpoints
-                ],
-                "total_checkpoints": len(checkpoints),
-                "passed_checkpoints": sum(1 for cp in checkpoints if cp.passed)
-            }
-        )
+            return ValidationResult(
+                validator_name="enhanced_prisma",
+                test_name="prisma_compliance_test",
+                status=ValidationStatus.PASSED if passed else ValidationStatus.FAILED,
+                score=overall_score,
+                details={
+                    "checkpoints": [
+                        {
+                            "name": cp.name,
+                            "passed": cp.passed,
+                            "score": cp.score,
+                            "details": cp.details
+                        }
+                        for cp in checkpoints
+                    ],
+                    "total_checkpoints": len(checkpoints),
+                    "passed_checkpoints": sum(1 for cp in checkpoints if cp.passed)
+                }
+            )
+        except ValidationError as e:
+            logger.error(f"Validation error in PRISMA validator: {str(e)}")
+            return ValidationResult(
+                validator_name="enhanced_prisma",
+                test_name="prisma_compliance_test",
+                status=ValidationStatus.ERROR,
+                score=0.0,
+                details={
+                    "error": str(e),
+                    "error_type": "validation_error"
+                }
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error in PRISMA validator: {str(e)}")
+            return ValidationResult(
+                validator_name="enhanced_prisma",
+                test_name="prisma_compliance_test",
+                status=ValidationStatus.ERROR,
+                score=0.0,
+                details={
+                    "error": str(e),
+                    "error_type": "unexpected_error"
+                }
+            )
 
     async def _validate_checkpoint(self, checkpoint_name: str, data: ResearchData) -> PRISMACheckpoint:
         """Validate individual PRISMA checkpoint with comprehensive logic."""
@@ -72,7 +94,7 @@ class EnhancedPRISMAValidator:
         title_text = (data.title or "").lower()
         combined_text = f"{title_text} {abstract_text}"
         
-        # 1. Protocol registration check
+        # Special handling for specific checkpoints
         if checkpoint_name == "protocol_registration":
             protocol_keywords = ["protocol", "prospero", "registration", "registered", "crd", "protocol number"]
             has_protocol = any(keyword in combined_text for keyword in protocol_keywords)
