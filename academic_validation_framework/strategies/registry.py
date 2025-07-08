@@ -10,8 +10,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import importlib
 import inspect
+import logging
+import threading
+from contextlib import contextmanager
 
 from .base import CitationFormatStrategy, FormatValidationResult
+from ..utils.lru_cache import LRUCache
+from ..config.validation_constants import ValidationConstants
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,11 +57,40 @@ class CitationFormatRegistry:
     and auto-detection capabilities.
     """
     
-    def __init__(self):
+    def __init__(self, cache_size: int = 100, cache_ttl: int = 3600):
+        """
+        Initialize the registry with LRU cache and thread safety.
+        
+        Args:
+            cache_size: Maximum number of items in cache
+            cache_ttl: Time-to-live for cache entries in seconds
+        """
         self._strategies: Dict[str, StrategyMetadata] = {}
         self._statistics = ValidationStatistics()
-        self._auto_detection_cache: Dict[str, str] = {}
+        self._auto_detection_cache = LRUCache(max_size=cache_size, ttl_seconds=cache_ttl)
         self._initialized = False
+        
+        # Thread safety
+        self._lock = threading.RLock()  # Reentrant lock for nested calls
+        self._stats_lock = threading.Lock()  # Separate lock for statistics
+    
+    @contextmanager
+    def _strategy_lock(self):
+        """Context manager for strategy operations."""
+        self._lock.acquire()
+        try:
+            yield
+        finally:
+            self._lock.release()
+    
+    @contextmanager
+    def _statistics_lock(self):
+        """Context manager for statistics operations."""
+        self._stats_lock.acquire()
+        try:
+            yield
+        finally:
+            self._stats_lock.release()
     
     def register_strategy(
         self,
@@ -63,7 +99,7 @@ class CitationFormatRegistry:
         is_enabled: bool = True
     ) -> bool:
         """
-        Register a citation format strategy.
+        Register a citation format strategy with thread safety.
         
         Args:
             strategy_class: Strategy class to register
@@ -73,43 +109,69 @@ class CitationFormatRegistry:
         Returns:
             True if registration successful, False otherwise
         """
-        try:
-            # Validate strategy class
-            if not issubclass(strategy_class, CitationFormatStrategy):
-                raise ValueError(f"Strategy class must inherit from CitationFormatStrategy")
-            
-            # Create instance to get metadata
-            instance = strategy_class()
-            
-            # Check for required properties
-            required_properties = ['format_name', 'format_version', 'supported_types']
-            for prop in required_properties:
-                if not hasattr(instance, prop):
-                    raise ValueError(f"Strategy missing required property: {prop}")
-            
-            format_name = instance.format_name.lower()
-            
-            # Check for duplicates
-            if format_name in self._strategies:
-                existing = self._strategies[format_name]
-                if existing.strategy_class == strategy_class:
-                    # Update existing registration
-                    existing.priority = priority
-                    existing.is_enabled = is_enabled
-                    existing.registration_time = datetime.now()
-                    return True
-                else:
-                    raise ValueError(f"Strategy '{format_name}' already registered with different class")
-            
-            # Register strategy
-            metadata = StrategyMetadata(
-                strategy_class=strategy_class,
-                name=format_name,
-                version=instance.format_version,
-                supported_types=instance.supported_types,
-                priority=priority,
-                is_enabled=is_enabled
-            )
+        with self._strategy_lock():
+            try:
+                # Security validation - prevent code injection
+                if not inspect.isclass(strategy_class):
+                    raise ValueError("strategy_class must be a class")
+                
+                # Validate that it's a proper class and not malicious code
+                if not hasattr(strategy_class, '__name__'):
+                    raise ValueError("Invalid strategy class - missing __name__")
+                
+                # Check for suspicious class names that might indicate injection
+                class_name = strategy_class.__name__
+                if not class_name.isidentifier() or class_name.startswith('_'):
+                    raise ValueError(f"Invalid class name: {class_name}")
+                
+                # Validate inheritance properly
+                if not issubclass(strategy_class, CitationFormatStrategy):
+                    raise ValueError(f"Strategy class must inherit from CitationFormatStrategy")
+                
+                # Validate module origin - only allow trusted modules
+                module_name = getattr(strategy_class, '__module__', None)
+                if module_name and not self._is_trusted_module(module_name):
+                    raise ValueError(f"Strategy from untrusted module: {module_name}")
+                
+                # Validate priority range to prevent resource abuse
+                if not isinstance(priority, int) or priority < 0 or priority > 100:
+                    raise ValueError("Priority must be an integer between 0 and 100")
+                
+                # Create instance safely - this could execute arbitrary code
+                try:
+                    instance = strategy_class()
+                except Exception as e:
+                    raise ValueError(f"Failed to instantiate strategy safely: {e}")
+                
+                # Check for required properties
+                required_properties = ['format_name', 'format_version', 'supported_types']
+                for prop in required_properties:
+                    if not hasattr(instance, prop):
+                        raise ValueError(f"Strategy missing required property: {prop}")
+                
+                format_name = instance.format_name.lower()
+                
+                # Check for duplicates
+                if format_name in self._strategies:
+                    existing = self._strategies[format_name]
+                    if existing.strategy_class == strategy_class:
+                        # Update existing registration
+                        existing.priority = priority
+                        existing.is_enabled = is_enabled
+                        existing.registration_time = datetime.now()
+                        return True
+                    else:
+                        raise ValueError(f"Strategy '{format_name}' already registered with different class")
+                
+                # Register strategy
+                metadata = StrategyMetadata(
+                    strategy_class=strategy_class,
+                    name=format_name,
+                    version=instance.format_version,
+                    supported_types=instance.supported_types,
+                    priority=priority,
+                    is_enabled=is_enabled
+                )
             
             self._strategies[format_name] = metadata
             
@@ -119,7 +181,7 @@ class CitationFormatRegistry:
             return True
             
         except Exception as e:
-            print(f"Failed to register strategy {strategy_class.__name__}: {e}")
+            logger.error(f"Failed to register strategy {strategy_class.__name__}: {e}")
             return False
     
     def unregister_strategy(self, format_name: str) -> bool:
@@ -133,15 +195,16 @@ class CitationFormatRegistry:
             True if unregistration successful, False otherwise
         """
         format_name = format_name.lower()
-        if format_name in self._strategies:
-            del self._strategies[format_name]
-            # Clear from cache
-            self._auto_detection_cache = {
-                k: v for k, v in self._auto_detection_cache.items() 
-                if v != format_name
-            }
-            return True
-        return False
+        
+        with self._strategy_lock():
+            if format_name in self._strategies:
+                del self._strategies[format_name]
+                # Clear this format from cache
+                # Since we can't iterate over LRU cache directly, we'll clear it
+                # This is acceptable as cache will rebuild naturally
+                self._auto_detection_cache.clear()
+                return True
+            return False
     
     def get_strategy(self, format_name: str, strict_mode: bool = False) -> Optional[CitationFormatStrategy]:
         """
@@ -155,19 +218,21 @@ class CitationFormatRegistry:
             Strategy instance or None if not found
         """
         format_name = format_name.lower()
-        metadata = self._strategies.get(format_name)
         
-        if metadata and metadata.is_enabled:
-            try:
-                instance = metadata.strategy_class(strict_mode=strict_mode)
-                
-                # Update usage statistics
-                metadata.usage_count += 1
-                metadata.last_used = datetime.now()
-                
-                return instance
-            except Exception as e:
-                print(f"Failed to create strategy instance for {format_name}: {e}")
+        with self._strategy_lock():
+            metadata = self._strategies.get(format_name)
+            
+            if metadata and metadata.is_enabled:
+                try:
+                    instance = metadata.strategy_class(strict_mode=strict_mode)
+                    
+                    # Update usage statistics safely within lock
+                    metadata.usage_count += 1
+                    metadata.last_used = datetime.now()
+                    
+                    return instance
+                except Exception as e:
+                    logger.error(f"Failed to create strategy instance for {format_name}: {e}")
         
         return None
     
@@ -202,17 +267,22 @@ class CitationFormatRegistry:
         if not citations:
             return None
         
-        # Check cache first
+        # Check cache first with thread safety
         cache_key = hash(tuple(citations[:3]))  # Use first 3 citations for cache key
-        if cache_key in self._auto_detection_cache:
-            cached_format = self._auto_detection_cache[cache_key]
-            if cached_format in self._strategies and self._strategies[cached_format].is_enabled:
-                return cached_format
+        cached_format = self._auto_detection_cache.get(cache_key)
+        if cached_format is not None:
+            with self._strategy_lock():
+                if cached_format in self._strategies and self._strategies[cached_format].is_enabled:
+                    return cached_format
         
         # Score each available format
         format_scores: Dict[str, float] = {}
         
-        for format_name, metadata in self._strategies.items():
+        # Get a snapshot of strategies to avoid holding lock during validation
+        with self._strategy_lock():
+            strategies_snapshot = [(name, metadata) for name, metadata in self._strategies.items()]
+        
+        for format_name, metadata in strategies_snapshot:
             if not metadata.is_enabled:
                 continue
             
@@ -240,7 +310,7 @@ class CitationFormatRegistry:
                 format_scores[format_name] = final_score
                 
             except Exception as e:
-                print(f"Auto-detection failed for {format_name}: {e}")
+                logger.warning(f"Auto-detection failed for {format_name}: {e}")
                 format_scores[format_name] = 0.0
         
         # Find best match
@@ -251,7 +321,7 @@ class CitationFormatRegistry:
             # Only return if confidence is reasonable
             if best_score > 0.5:
                 # Cache result
-                self._auto_detection_cache[cache_key] = best_format
+                self._auto_detection_cache.put(cache_key, best_format)
                 return best_format
         
         return None
@@ -295,7 +365,7 @@ class CitationFormatRegistry:
                     self._update_statistics(format_name, result, processing_time)
                     
                 except Exception as e:
-                    print(f"Validation failed for format {format_name}: {e}")
+                    logger.warning(f"Validation failed for format {format_name}: {e}")
                     # Create error result
                     results[format_name] = FormatValidationResult(
                         format_name=format_name,
@@ -347,36 +417,46 @@ class CitationFormatRegistry:
         result: FormatValidationResult,
         processing_time: float
     ) -> None:
-        """Update validation statistics."""
-        self._statistics.total_validations += 1
-        
-        if result.is_valid:
-            self._statistics.successful_validations += 1
-        else:
-            self._statistics.failed_validations += 1
-        
-        # Update format distribution
-        self._statistics.format_distribution[format_name] += 1
-        
-        # Update average processing time
-        total_time = (self._statistics.average_processing_time * 
-                     (self._statistics.total_validations - 1) + processing_time)
-        self._statistics.average_processing_time = total_time / self._statistics.total_validations
-        
-        # Update average confidence
-        total_confidence = (self._statistics.average_confidence * 
-                          (self._statistics.total_validations - 1) + result.confidence)
-        self._statistics.average_confidence = total_confidence / self._statistics.total_validations
-        
-        # Update strategy success rate
-        metadata = self._strategies.get(format_name)
-        if metadata:
+        """Update validation statistics with thread safety."""
+        with self._statistics_lock():
+            self._statistics.total_validations += 1
+            
             if result.is_valid:
-                metadata.success_rate = ((metadata.success_rate * metadata.usage_count + 1.0) / 
-                                       (metadata.usage_count + 1))
+                self._statistics.successful_validations += 1
             else:
-                metadata.success_rate = ((metadata.success_rate * metadata.usage_count) / 
-                                       (metadata.usage_count + 1))
+                self._statistics.failed_validations += 1
+            
+            # Update format distribution with bounds checking
+            if format_name not in self._statistics.format_distribution:
+                self._statistics.format_distribution[format_name] = 0
+            self._statistics.format_distribution[format_name] += 1
+            
+            # Cleanup statistics if they grow too large
+            perf_constants = ValidationConstants.PERFORMANCE
+            if (len(self._statistics.format_distribution) > perf_constants.STATISTICS_CLEANUP_THRESHOLD or
+                len(self._statistics.error_patterns) > perf_constants.STATISTICS_CLEANUP_THRESHOLD):
+                self._cleanup_statistics()
+            
+            # Update average processing time
+            total_time = (self._statistics.average_processing_time * 
+                         (self._statistics.total_validations - 1) + processing_time)
+            self._statistics.average_processing_time = total_time / self._statistics.total_validations
+            
+            # Update average confidence
+            total_confidence = (self._statistics.average_confidence * 
+                              (self._statistics.total_validations - 1) + result.confidence)
+            self._statistics.average_confidence = total_confidence / self._statistics.total_validations
+        
+        # Update strategy success rate (needs strategy lock)
+        with self._strategy_lock():
+            metadata = self._strategies.get(format_name)
+            if metadata:
+                if result.is_valid:
+                    metadata.success_rate = ((metadata.success_rate * metadata.usage_count + 1.0) / 
+                                           (metadata.usage_count + 1))
+                else:
+                    metadata.success_rate = ((metadata.success_rate * metadata.usage_count) / 
+                                           (metadata.usage_count + 1))
         
         # Track error patterns
         for error in result.errors:
@@ -444,40 +524,119 @@ class CitationFormatRegistry:
             self._initialized = True
             
         except ImportError as e:
-            print(f"Failed to initialize some default strategies: {e}")
+            logger.error(f"Failed to initialize some default strategies: {e}")
     
     def clear_cache(self) -> None:
         """Clear auto-detection cache."""
         self._auto_detection_cache.clear()
     
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        return self._auto_detection_cache.stats()
+    
     def enable_strategy(self, format_name: str) -> bool:
         """Enable a strategy."""
         format_name = format_name.lower()
-        if format_name in self._strategies:
-            self._strategies[format_name].is_enabled = True
-            return True
-        return False
+        
+        with self._strategy_lock():
+            if format_name in self._strategies:
+                self._strategies[format_name].is_enabled = True
+                return True
+            return False
     
     def disable_strategy(self, format_name: str) -> bool:
         """Disable a strategy."""
         format_name = format_name.lower()
-        if format_name in self._strategies:
-            self._strategies[format_name].is_enabled = False
-            # Clear from cache
-            self._auto_detection_cache = {
-                k: v for k, v in self._auto_detection_cache.items() 
-                if v != format_name
-            }
-            return True
-        return False
+        
+        with self._strategy_lock():
+            if format_name in self._strategies:
+                self._strategies[format_name].is_enabled = False
+                # Clear this format from cache
+                # Since we can't iterate over LRU cache directly, we'll clear it
+                # This is acceptable as cache will rebuild naturally
+                self._auto_detection_cache.clear()
+                return True
+            return False
     
     def reset_statistics(self) -> None:
         """Reset all validation statistics."""
-        self._statistics = ValidationStatistics()
-        for metadata in self._strategies.values():
-            metadata.usage_count = 0
-            metadata.success_rate = 0.0
-            metadata.last_used = None
+        with self._statistics_lock():
+            self._statistics = ValidationStatistics()
+        
+        with self._strategy_lock():
+            for metadata in self._strategies.values():
+                metadata.usage_count = 0
+                metadata.success_rate = 0.0
+                metadata.last_used = None
+    
+    def _cleanup_statistics(self) -> None:
+        """Clean up statistics to prevent unbounded growth."""
+        perf_constants = ValidationConstants.PERFORMANCE
+        
+        # Keep only the most frequent format distributions
+        if len(self._statistics.format_distribution) > perf_constants.MAX_STATISTICS_ENTRIES:
+            # Sort by count, keep top entries
+            sorted_formats = sorted(
+                self._statistics.format_distribution.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+            self._statistics.format_distribution = dict(
+                sorted_formats[:perf_constants.MAX_STATISTICS_ENTRIES]
+            )
+            logger.info(f"Cleaned format distribution statistics, kept {perf_constants.MAX_STATISTICS_ENTRIES} entries")
+        
+        # Keep only the most frequent error patterns
+        if len(self._statistics.error_patterns) > perf_constants.MAX_ERROR_PATTERNS:
+            # Sort by count, keep top entries
+            sorted_errors = sorted(
+                self._statistics.error_patterns.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+            self._statistics.error_patterns = dict(
+                sorted_errors[:perf_constants.MAX_ERROR_PATTERNS]
+            )
+            logger.info(f"Cleaned error pattern statistics, kept {perf_constants.MAX_ERROR_PATTERNS} entries")
+    
+    def _is_trusted_module(self, module_name: str) -> bool:
+        """Check if a module is trusted for strategy registration."""
+        # Use exact matching for dangerous modules to prevent bypass
+        dangerous_modules = {
+            'os', 'sys', 'subprocess', 'eval', 'exec', 'importlib',
+            'socket', 'urllib', 'requests', 'http', 'urllib2', 'urllib3',
+            'httplib', 'httplib2', 'ftplib', 'telnetlib', 'smtplib',
+            'poplib', 'imaplib', 'nntplib', 'xmlrpclib', 'SimpleXMLRPCServer',
+            'DocXMLRPCServer', 'CGIHTTPServer', 'BaseHTTPServer', 'SimpleHTTPServer',
+            'CGIXMLRPCRequestHandler', 'pickle', 'cPickle', 'marshal', 'shelve'
+        }
+        
+        # First check if it's a dangerous module
+        if module_name in dangerous_modules:
+            return False
+        
+        # Check if any component of the module path is dangerous
+        module_parts = module_name.split('.')
+        for part in module_parts:
+            if part in dangerous_modules:
+                return False
+        
+        # Trusted modules - use exact prefixes and be more restrictive
+        trusted_prefixes = [
+            'academic_validation_framework.',  # Note the dot to ensure exact prefix
+            'academic_validation_framework',   # Allow the package itself
+            '__main__',                       # Allow for testing
+            'test_',                         # Allow test modules
+            'tests.',                        # Allow test packages
+        ]
+        
+        # Check if it starts with a trusted prefix
+        for prefix in trusted_prefixes:
+            if module_name == prefix or module_name.startswith(prefix):
+                return True
+        
+        # Default to untrusted
+        return False
 
 
 # Global registry instance
