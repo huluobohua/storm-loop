@@ -110,13 +110,50 @@ Common issues and solutions:
 2. **Permission Denied**: Ensure AWS credentials have necessary IAM permissions
 3. **Resource Limits**: Request AWS service quota increases if needed
 
+## EKS Cluster Access
+
+The EKS cluster is configured with both public and private endpoint access for flexibility:
+
+### Accessing the Cluster
+
+1. **Configure kubectl**:
+   ```bash
+   aws eks update-kubeconfig --region <your-region> --name <cluster-name>
+   ```
+
+2. **Verify access**:
+   ```bash
+   kubectl get nodes
+   ```
+
+### Security Configuration
+
+- **Public Access**: Enabled but restricted to specific CIDR blocks (configure `allowed_cidr_blocks` variable)
+- **Private Access**: Enabled for internal communication
+- **Endpoint Access**: Controlled via security groups and IAM roles
+
+### For Production Environments
+
+To enhance security in production:
+
+1. **Restrict Public Access**: Update `allowed_cidr_blocks` to your specific IP ranges
+2. **Use Bastion Host**: For even tighter security, consider disabling public access and using a bastion host
+3. **VPN Access**: Implement AWS Client VPN for secure access to private resources
+
+### IAM Requirements
+
+Your AWS user/role needs:
+- `eks:DescribeCluster` permission
+- Proper role mapping in `aws-auth` ConfigMap (automatically configured via `aws_auth_roles`)
+
 ## Next Steps
 
 After infrastructure is provisioned:
-1. Deploy applications using Kubernetes manifests
-2. Configure DNS records in Route53
-3. Set up monitoring dashboards
-4. Configure backup policies
-5. Test disaster recovery procedures
+1. Configure kubectl access to the EKS cluster (see EKS Cluster Access section above)
+2. Deploy applications using Kubernetes manifests
+3. Configure DNS records in Route53
+4. Set up monitoring dashboards
+5. Configure backup policies
+6. Test disaster recovery procedures
 
 For questions or issues, please refer to the main project documentation.

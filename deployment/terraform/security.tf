@@ -157,7 +157,9 @@ resource "aws_iam_role_policy" "external_secrets" {
           "secretsmanager:DescribeSecret"
         ]
         Resource = [
-          aws_secretsmanager_secret.api_keys.arn
+          aws_secretsmanager_secret.api_keys.arn,
+          aws_secretsmanager_secret.rds_password.arn,
+          aws_secretsmanager_secret.redis_password.arn
         ]
       }
     ]
@@ -230,7 +232,7 @@ resource "aws_iam_role" "app_s3_access" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub" = "system:serviceaccount:storm-production:storm-app"
+            "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub" = "system:serviceaccount:${var.app_k8s_namespace}:${var.app_k8s_service_account_name}"
           }
         }
       }
@@ -282,13 +284,38 @@ resource "aws_kms_alias" "main" {
   target_key_id = aws_kms_key.main.key_id
 }
 
-# Random passwords
-resource "random_password" "rds_password" {
-  length  = 32
-  special = true
+# Secrets Manager for RDS password
+resource "aws_secretsmanager_secret" "rds_password" {
+  name        = "${var.project_name}-${var.environment}-rds-password"
+  description = "Password for RDS PostgreSQL instance"
+  
+  tags = {
+    Environment = var.environment
+  }
 }
 
-resource "random_password" "redis_password" {
-  length  = 32
-  special = false  # Redis doesn't like special characters in auth tokens
+resource "aws_secretsmanager_secret_version" "rds_password" {
+  secret_id     = aws_secretsmanager_secret.rds_password.id
+  generate_secret_string {
+    length  = 32
+    exclude_characters = "\"@/\\"
+  }
+}
+
+# Secrets Manager for Redis password
+resource "aws_secretsmanager_secret" "redis_password" {
+  name        = "${var.project_name}-${var.environment}-redis-password"
+  description = "Auth token for ElastiCache Redis cluster"
+  
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "redis_password" {
+  secret_id     = aws_secretsmanager_secret.redis_password.id
+  generate_secret_string {
+    length             = 32
+    exclude_characters = "\"@/\\!#$%^&*()_+-=[]{}|;':,.<>?"  # Redis-safe characters only
+  }
 }

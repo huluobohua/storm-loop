@@ -16,7 +16,7 @@ variable "environment" {
 variable "aws_region" {
   description = "AWS region for deployment"
   type        = string
-  default     = "us-east-1"
+  default     = "us-west-2"
 }
 
 variable "cluster_name" {
@@ -169,4 +169,23 @@ variable "tags" {
   description = "Additional tags for resources"
   type        = map(string)
   default     = {}
+}
+
+# Service Account Configuration
+variable "app_k8s_namespace" {
+  description = "Kubernetes namespace for the application"
+  type        = string
+  default     = "storm-production"
+}
+
+variable "app_k8s_service_account_name" {
+  description = "Kubernetes service account name for the application"
+  type        = string
+  default     = "storm-app"
+}
+
+variable "project_owner" {
+  description = "Project owner for tagging"
+  type        = string
+  default     = ""
 }

@@ -31,7 +31,7 @@ provider "aws" {
   default_tags {
     tags = {
       Environment = var.environment
-      Project     = "storm-academic"
+      Project     = var.project_name
       ManagedBy   = "terraform"
     }
   }
@@ -189,7 +189,8 @@ module "rds" {
   
   db_name  = "storm"
   username = "storm"
-  password = random_password.rds_password.result
+  manage_master_user_password = true
+  master_user_secret_kms_key_id = aws_kms_key.main.key_id
   port     = "5432"
   
   vpc_security_group_ids = [aws_security_group.rds.id]
@@ -242,7 +243,7 @@ module "redis" {
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
   auth_token_enabled = true
-  auth_token = random_password.redis_password.result
+  auth_token = jsondecode(aws_secretsmanager_secret_version.redis_password.secret_string)
   
   automatic_failover_enabled = var.redis_num_nodes > 1
   
@@ -289,6 +290,64 @@ resource "aws_s3_bucket_public_access_block" "storage" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+# ALB Access Logs Bucket
+resource "aws_s3_bucket" "alb_logs" {
+  bucket = "${var.project_name}-${var.environment}-alb-logs"
+  
+  tags = {
+    Environment = var.environment
+  }
+}
+
+resource "aws_s3_bucket_versioning" "alb_logs" {
+  bucket = aws_s3_bucket.alb_logs.id
+  
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_encryption" "alb_logs" {
+  bucket = aws_s3_bucket.alb_logs.id
+  
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "alb_logs" {
+  bucket = aws_s3_bucket.alb_logs.id
+  
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# ALB logs bucket policy
+resource "aws_s3_bucket_policy" "alb_logs" {
+  bucket = aws_s3_bucket.alb_logs.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = data.aws_elb_service_account.main.arn
+        }
+        Action = "s3:PutObject"
+        Resource = "${aws_s3_bucket.alb_logs.arn}/*"
+      }
+    ]
+  })
+}
+
+# ELB service account data source
+data "aws_elb_service_account" "main" {}
 
 # Application Load Balancer
 resource "aws_lb" "main" {
@@ -410,27 +469,3 @@ resource "aws_secretsmanager_secret_version" "api_keys" {
   })
 }
 
-# Outputs
-output "eks_cluster_endpoint" {
-  value = module.eks.cluster_endpoint
-}
-
-output "eks_cluster_name" {
-  value = module.eks.cluster_name
-}
-
-output "rds_endpoint" {
-  value = module.rds.db_instance_endpoint
-}
-
-output "redis_endpoint" {
-  value = module.redis.cluster_cache_nodes[0].address
-}
-
-output "alb_dns_name" {
-  value = aws_lb.main.dns_name
-}
-
-output "s3_bucket_name" {
-  value = aws_s3_bucket.storage.id
-}
