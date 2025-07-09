@@ -87,6 +87,14 @@ Key outputs available after infrastructure creation:
 4. **Network**: Private subnets for databases and internal services
 5. **Encryption**: All data at rest and in transit is encrypted
 
+### Critical Security Features
+
+- **EKS Cluster Access**: Restricted to specific CIDR blocks (NEVER use 0.0.0.0/0)
+- **API Keys**: Must be provided via environment variables, never stored in files
+- **RBAC**: Uses least-privilege `storm:cluster-operators` group instead of dangerous `system:masters`
+- **Network Isolation**: Databases and cache only accessible from EKS nodes
+- **Secrets Management**: All passwords generated and stored in AWS Secrets Manager
+
 ## Cost Optimization
 
 To reduce costs in non-production environments:

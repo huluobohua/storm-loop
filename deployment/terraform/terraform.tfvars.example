@@ -21,6 +21,14 @@ project_owner = "your-team@example.com"
 vpc_cidr = "10.0.0.0/16"
 azs      = ["us-west-2a", "us-west-2b", "us-west-2c"]
 
+# EKS Security Configuration - CRITICAL: Specify your IP ranges
+# NEVER use 0.0.0.0/0 in production - this would expose your cluster to the internet
+# Examples:
+# - Office IP: ["203.0.113.0/24"]
+# - Multiple IPs: ["203.0.113.0/24", "198.51.100.0/24"]
+# - Single IP: ["203.0.113.42/32"]
+allowed_cidr_blocks = ["YOUR_OFFICE_IP/32"]  # REQUIRED - Replace with your actual IP ranges
+
 # EKS Configuration
 eks_cluster_version = "1.28"
 eks_node_groups = {
@@ -72,10 +80,12 @@ additional_tags = {
   Compliance = "soc2"
 }
 
-# API Keys (REQUIRED - provide via environment variables, never commit to VCS)
-# These should be provided via environment variables:
+# API Keys (REQUIRED - provide via environment variables, NEVER in this file)
+# SECURITY CRITICAL: API keys must NEVER be stored in terraform files
+# Use environment variables ONLY:
 # export TF_VAR_anthropic_api_key="your-actual-key"
-anthropic_api_key = ""
-openai_api_key = ""
-google_api_key = ""
-perplexity_api_key = ""
+# export TF_VAR_openai_api_key="your-actual-key"
+# export TF_VAR_google_api_key="your-actual-key"
+# export TF_VAR_perplexity_api_key="your-actual-key"
+#
+# DO NOT uncomment or add API key values to this file - they belong in environment variables only

@@ -165,7 +165,8 @@ module "eks" {
     {
       rolearn  = aws_iam_role.eks_admin.arn
       username = "admin:{{SessionName}}"
-      groups   = ["system:masters"]
+      # Use least-privilege groups instead of system:masters
+      groups   = ["storm:cluster-operators"]
     }
   ]
   
@@ -467,5 +468,82 @@ resource "aws_secretsmanager_secret_version" "api_keys" {
     GOOGLE_API_KEY    = var.google_api_key
     PERPLEXITY_API_KEY = var.perplexity_api_key
   })
+}
+
+# Kubernetes RBAC for least-privilege access (replaces dangerous system:masters)
+resource "kubernetes_cluster_role" "cluster_operator" {
+  depends_on = [module.eks]
+  
+  metadata {
+    name = "storm-cluster-operator"
+  }
+  
+  # Application management permissions
+  rule {
+    api_groups = ["", "apps", "extensions"]
+    resources  = ["deployments", "replicasets", "pods", "services", "configmaps", "secrets"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+  
+  # Namespace management
+  rule {
+    api_groups = [""]
+    resources  = ["namespaces"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch"]
+  }
+  
+  # Node monitoring (read-only)
+  rule {
+    api_groups = [""]
+    resources  = ["nodes", "nodes/status"]
+    verbs      = ["get", "list", "watch"]
+  }
+  
+  # Ingress management
+  rule {
+    api_groups = ["networking.k8s.io"]
+    resources  = ["ingresses", "networkpolicies"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+  
+  # RBAC read access for troubleshooting
+  rule {
+    api_groups = ["rbac.authorization.k8s.io"]
+    resources  = ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs      = ["get", "list", "watch"]
+  }
+  
+  # Metrics and monitoring
+  rule {
+    api_groups = ["metrics.k8s.io"]
+    resources  = ["nodes", "pods"]
+    verbs      = ["get", "list"]
+  }
+  
+  # Events for debugging
+  rule {
+    api_groups = [""]
+    resources  = ["events"]
+    verbs      = ["get", "list", "watch"]
+  }
+}
+
+resource "kubernetes_cluster_role_binding" "cluster_operator" {
+  depends_on = [module.eks, kubernetes_cluster_role.cluster_operator]
+  
+  metadata {
+    name = "storm-cluster-operator-binding"
+  }
+  
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.cluster_operator.metadata[0].name
+  }
+  
+  subject {
+    kind = "Group"
+    name = "storm:cluster-operators"
+  }
 }
 
