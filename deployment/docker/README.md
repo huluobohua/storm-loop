@@ -9,6 +9,7 @@ This directory contains the Docker configuration for the STORM Academic Research
 - **No unnecessary packages** in production stage
 - **Health checks** built into the container
 - **Environment variable support** for configuration
+- **Pinned dependency versions** for reproducible builds
 
 ## Building
 
@@ -37,6 +38,7 @@ docker run -p 8501:8501 \
 ## Environment Variables
 
 Required environment variables:
+
 - `STORM_ENV`: Environment (development/staging/production)
 - `STORM_DATA_DIR`: Data directory path
 - `STORM_LOG_DIR`: Log directory path
@@ -56,4 +58,7 @@ The container includes a health check that queries the Streamlit health endpoint
 2. All Python dependencies are installed in the builder stage
 3. Only runtime dependencies are included in the final image
 4. The application directories are owned by the non-root user
-5. No shell or package managers in the final image (for reduced attack surface)
+5. Runtime dependencies limited to essential packages (curl for health checks, libgomp1 for numpy)
+6. .dockerignore prevents sensitive files from being copied into the image
+7. All Python dependencies are pinned to specific versions for reproducibility
+8. CORS enabled with XSRF protection for secure browser access
