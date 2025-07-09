@@ -1,29 +1,5 @@
-terraform {
-  required_version = ">= 1.5.0"
-  
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.11"
-    }
-  }
-  
-  backend "s3" {
-    bucket = "storm-terraform-state"
-    key    = "production/terraform.tfstate"
-    region = "us-east-1"
-    encrypt = true
-    dynamodb_table = "storm-terraform-locks"
-  }
-}
+# Terraform backend configuration moved to providers.tf
+# to avoid duplicate terraform blocks
 
 provider "aws" {
   region = var.aws_region
@@ -93,9 +69,9 @@ module "eks" {
   
   enable_irsa = true
   
-  cluster_endpoint_public_access  = true
+  cluster_endpoint_public_access  = false
   cluster_endpoint_private_access = true
-  cluster_endpoint_public_access_cidrs = var.allowed_cidr_blocks
+  # Private-only access for maximum security
   
   cluster_addons = {
     coredns = {
@@ -169,9 +145,6 @@ module "eks" {
     }
   ]
   
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # RDS PostgreSQL
@@ -189,7 +162,8 @@ module "rds" {
   
   db_name  = "storm"
   username = "storm"
-  password = random_password.rds_password.result
+  manage_master_user_password = true
+  master_user_secret_kms_key_id = aws_kms_key.rds.arn
   port     = "5432"
   
   vpc_security_group_ids = [aws_security_group.rds.id]
@@ -219,9 +193,6 @@ module "rds" {
     }
   ]
   
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # ElastiCache Redis
@@ -242,25 +213,19 @@ module "redis" {
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
   auth_token_enabled = true
-  auth_token = random_password.redis_password.result
+  auth_token = random_password.redis_auth.result
   
   automatic_failover_enabled = var.redis_num_nodes > 1
   
   snapshot_retention_limit = 5
   snapshot_window = "03:00-05:00"
   
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # S3 Buckets
 resource "aws_s3_bucket" "storage" {
   bucket = "${var.project_name}-${var.environment}-storage"
   
-  tags = {
-    Environment = var.environment
-  }
 }
 
 resource "aws_s3_bucket_versioning" "storage" {
@@ -306,9 +271,6 @@ resource "aws_lb" "main" {
     enabled = true
   }
   
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # WAF
@@ -370,9 +332,6 @@ resource "aws_wafv2_web_acl" "main" {
     sampled_requests_enabled   = true
   }
   
-  tags = {
-    Environment = var.environment
-  }
 }
 
 resource "aws_wafv2_web_acl_association" "main" {
@@ -385,18 +344,12 @@ resource "aws_cloudwatch_log_group" "app_logs" {
   name              = "/aws/eks/${var.cluster_name}/app"
   retention_in_days = var.log_retention_days
   
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # Secrets Manager
 resource "aws_secretsmanager_secret" "api_keys" {
   name = "${var.project_name}-${var.environment}-api-keys"
   
-  tags = {
-    Environment = var.environment
-  }
 }
 
 resource "aws_secretsmanager_secret_version" "api_keys" {

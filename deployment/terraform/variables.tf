@@ -22,7 +22,7 @@ variable "aws_region" {
 variable "cluster_name" {
   description = "EKS cluster name"
   type        = string
-  default     = ""
+  default     = "storm-production-eks"
 }
 
 variable "kubernetes_version" {
@@ -57,9 +57,9 @@ variable "database_subnet_cidrs" {
 }
 
 variable "allowed_cidr_blocks" {
-  description = "CIDR blocks allowed to access the cluster API"
+  description = "CIDR blocks allowed to access the cluster API (deprecated - cluster uses private-only access)"
   type        = list(string)
-  default     = ["0.0.0.0/0"]  # Restrict in production
+  default     = []  # Not used in private-only configuration
 }
 
 # EKS Node Groups
