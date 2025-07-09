@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # Main STORM application
+  storm-app:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile
+    container_name: storm-app
+    ports:
+      - "8501:8501"
+    environment:
+      - STORM_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=postgresql://storm:storm@postgres:5432/storm
+      - QDRANT_URL=http://qdrant:6333
+    env_file:
+      - ../../.env
+    volumes:
+      - storm-data:/app/data
+      - storm-logs:/app/logs
+      - storm-cache:/app/cache
+    depends_on:
+      - redis
+      - postgres
+      - qdrant
+    restart: unless-stopped
+    networks:
+      - storm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: storm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-storm_redis_pass}
+    networks:
+      - storm-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL for persistent storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: storm-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=storm
+      - POSTGRES_USER=storm
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-storm_db_pass}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - storm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant vector database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: storm-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__LOG_LEVEL=INFO
+    networks:
+      - storm-network
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: storm-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - storm-app
+    networks:
+      - storm-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery worker for background tasks
+  celery-worker:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.celery
+    container_name: storm-celery-worker
+    command: celery -A storm_celery worker --loglevel=info
+    environment:
+      - STORM_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=postgresql://storm:storm@postgres:5432/storm
+    env_file:
+      - ../../.env
+    volumes:
+      - storm-data:/app/data
+      - storm-logs:/app/logs
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - storm-network
+    restart: unless-stopped
+
+  # Celery beat for scheduled tasks
+  celery-beat:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.celery
+    container_name: storm-celery-beat
+    command: celery -A storm_celery beat --loglevel=info
+    environment:
+      - STORM_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=postgresql://storm:storm@postgres:5432/storm
+    env_file:
+      - ../../.env
+    volumes:
+      - storm-logs:/app/logs
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - storm-network
+    restart: unless-stopped
+
+volumes:
+  storm-data:
+  storm-logs:
+  storm-cache:
+  redis-data:
+  postgres-data:
+  qdrant-data:
+  nginx-logs:
+
+networks:
+  storm-network:
+    driver: bridge

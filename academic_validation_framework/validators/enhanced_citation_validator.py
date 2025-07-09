@@ -1,24 +1,93 @@
+import logging
 import re
-from typing import Dict, List, Tuple
 from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
+from academic_validation_framework.config import ValidationConfig
 from academic_validation_framework.interfaces_v2 import ValidatorProtocol
 from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
-from academic_validation_framework.config import ValidationConfig
+from academic_validation_framework.validators.config_validator import ConfigValidator
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class CitationFormatCheck:
-    """Citation format validation result."""
+    """
+    Result of citation format validation for a specific citation style.
+    
+    Contains the validation results for a particular citation format,
+    including validity, confidence level, and any formatting errors found.
+    
+    Attributes:
+        format_name: Name of the citation format (e.g., "APA", "MLA", "Chicago")
+        is_valid: Whether the citation meets the format requirements
+        confidence: Confidence level of the validation (0.0 to 1.0)
+        errors: List of specific formatting errors found
+    """
     format_name: str
     is_valid: bool
     confidence: float
     errors: List[str]
 
-class EnhancedCitationValidator:
-    """Multi-format citation accuracy validator."""
+class EnhancedCitationValidator(ValidatorProtocol):
+    """
+    Enhanced citation accuracy validator supporting multiple citation formats.
+    
+    This validator analyzes research citations for accuracy and proper formatting
+    across multiple academic citation styles. It performs comprehensive validation
+    to ensure citations meet the requirements of various academic formats.
+    
+    Supported citation formats:
+    - APA (American Psychological Association)
+    - MLA (Modern Language Association)
+    - Chicago (Chicago Manual of Style)
+    - IEEE (Institute of Electrical and Electronics Engineers)
+    - Harvard (Harvard referencing system)
+    
+    The validator performs:
+    - Format pattern matching
+    - Structural validation
+    - Completeness checks
+    - Consistency verification
+    - Cross-format comparison
+    
+    Attributes:
+        config: ValidationConfig instance with citation settings
+        supported_formats: List of supported citation formats
+        
+    Example:
+        >>> config = ValidationConfig(citation_accuracy_threshold=0.9)
+        >>> validator = EnhancedCitationValidator(config)
+        >>> result = await validator.validate(research_data)
+        >>> print(f"Citation accuracy: {result.score:.2f}")
+    """
 
-    def __init__(self, config: 'ValidationConfig'):
-        self.config = config
-        self.supported_formats = ["APA", "MLA", "Chicago", "IEEE", "Harvard"]
+    def __init__(self, config: ValidationConfig):
+        # Validate and fix config
+        config_validation = ConfigValidator.validate_config(config)
+        if not config_validation.is_valid:
+            logger.warning(f"Configuration validation failed: {config_validation.errors}")
+            self.config = ConfigValidator.validate_and_fix_config(config)
+            logger.info("Configuration has been automatically corrected")
+        else:
+            self.config = config
+        
+        # Log configuration warnings
+        if config_validation.warnings:
+            for warning in config_validation.warnings:
+                logger.warning(f"Configuration warning: {warning}")
+        
+        self.supported_formats = self.config.citation_formats or ["APA", "MLA", "Chicago", "IEEE", "Harvard"]
+    
+    @property
+    def name(self) -> str:
+        """Return the validator name."""
+        return "enhanced_citation"
+    
+    @property
+    def supported_data_types(self) -> List[type]:
+        """Return the supported data types."""
+        return [ResearchData]
 
     async def validate(self, data: ResearchData) -> ValidationResult:
         """Validate citation accuracy across multiple formats."""

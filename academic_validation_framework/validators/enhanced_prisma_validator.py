@@ -1,30 +1,94 @@
-from typing import Dict, List, Any
+import logging
 from dataclasses import dataclass
-from academic_validation_framework.interfaces_v2 import ValidatorProtocol
-from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
+from typing import Dict, List, Any
+
 from academic_validation_framework.config import ValidationConfig
 from academic_validation_framework.config.validation_constants import ValidationConstants
+from academic_validation_framework.interfaces_v2 import ValidatorProtocol
+from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
 from academic_validation_framework.utils.input_validation import validate_input, InputValidator, ValidationError
-import logging
+from academic_validation_framework.validators.config_validator import ConfigValidator
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class PRISMACheckpoint:
-    """Individual PRISMA compliance checkpoint."""
+    """
+    Individual PRISMA compliance checkpoint result.
+    
+    Represents the result of validating a single PRISMA guideline checkpoint,
+    including whether it passed, its score, and detailed information.
+    
+    Attributes:
+        name: Unique identifier for the checkpoint (e.g., "protocol_registration")
+        description: Human-readable description of what this checkpoint validates
+        passed: Whether this checkpoint passed validation
+        score: Numeric score for this checkpoint (0.0 to 1.0)
+        details: Detailed information about the validation result
+    """
     name: str
     description: str
     passed: bool
     score: float
     details: str
 
-class EnhancedPRISMAValidator:
-    """PRISMA systematic review compliance validator."""
+class EnhancedPRISMAValidator(ValidatorProtocol):
+    """
+    Enhanced PRISMA systematic review compliance validator.
+    
+    This validator assesses research data for compliance with PRISMA 
+    (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) 
+    guidelines. It evaluates multiple checkpoints to determine overall 
+    compliance with systematic review reporting standards.
+    
+    The validator performs comprehensive checks including:
+    - Protocol registration verification
+    - Search strategy documentation
+    - Study selection criteria
+    - Data extraction methods
+    - Risk of bias assessment
+    - Synthesis methods
+    - Reporting bias evaluation
+    
+    Attributes:
+        config: ValidationConfig instance with settings
+        constants: PRISMA validation constants
+        checkpoints: List of PRISMA checkpoints to validate
+        
+    Example:
+        >>> config = ValidationConfig(prisma_compliance_threshold=0.8)
+        >>> validator = EnhancedPRISMAValidator(config)
+        >>> result = await validator.validate(research_data)
+        >>> print(f"PRISMA compliance: {result.score:.2f}")
+    """
 
-    def __init__(self, config: 'ValidationConfig'):
-        self.config = config
+    def __init__(self, config: ValidationConfig):
+        # Validate and fix config
+        config_validation = ConfigValidator.validate_config(config)
+        if not config_validation.is_valid:
+            logger.warning(f"Configuration validation failed: {config_validation.errors}")
+            self.config = ConfigValidator.validate_and_fix_config(config)
+            logger.info("Configuration has been automatically corrected")
+        else:
+            self.config = config
+        
+        # Log configuration warnings
+        if config_validation.warnings:
+            for warning in config_validation.warnings:
+                logger.warning(f"Configuration warning: {warning}")
+        
         self.constants = ValidationConstants.PRISMA
         self.checkpoints = self.constants.CHECKPOINTS
+    
+    @property
+    def name(self) -> str:
+        """Return the validator name."""
+        return "enhanced_prisma"
+    
+    @property
+    def supported_data_types(self) -> List[type]:
+        """Return the supported data types."""
+        return [ResearchData]
 
     @validate_input
     async def validate(self, data: ResearchData) -> ValidationResult:

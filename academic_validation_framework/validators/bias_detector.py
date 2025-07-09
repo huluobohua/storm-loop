@@ -1,42 +1,114 @@
-from typing import Dict, List, Optional
+import logging
 from dataclasses import dataclass
-from academic_validation_framework.interfaces_v2 import ValidatorProtocol
-from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
+from typing import Dict, List, Optional
+
 from academic_validation_framework.config import ValidationConfig
 from academic_validation_framework.config.validation_constants import ValidationConstants
+from academic_validation_framework.interfaces_v2 import ValidatorProtocol
+from academic_validation_framework.models import ResearchData, ValidationResult, ValidationStatus
 from academic_validation_framework.utils.input_validation import validate_input, InputValidator, ValidationError
+from academic_validation_framework.validators.config_validator import ConfigValidator
 from academic_validation_framework.validators.strategies.bias_detection_strategies import (
     ConfirmationBiasStrategy, PublicationBiasStrategy, SelectionBiasStrategy,
     FundingBiasStrategy, ReportingBiasStrategy
 )
-import logging
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class BiasCheck:
-    """Individual bias detection result."""
+    """
+    Result of individual bias detection analysis.
+    
+    Contains the findings for a specific type of bias detection,
+    including detection status, confidence level, and supporting evidence.
+    
+    Attributes:
+        bias_type: Type of bias analyzed (e.g., "confirmation_bias", "publication_bias")
+        detected: Whether bias was detected in the research
+        confidence: Confidence level of the detection (0.0 to 1.0)
+        evidence: List of textual evidence supporting the bias detection
+    """
     bias_type: str
     detected: bool
     confidence: float
     evidence: List[str]
 
-class BiasDetector:
-    """Comprehensive bias detection validator using Strategy pattern."""
-
-    def __init__(self, config: 'ValidationConfig'):
-        self.config = config
-        self.constants = ValidationConstants()
-        self.bias_types = self.constants.BIAS.BIAS_TYPES
+class BiasDetector(ValidatorProtocol):
+    """
+    Comprehensive bias detection validator using Strategy pattern.
+    
+    This validator analyzes research data to detect various types of bias
+    that may affect the validity and reliability of research findings.
+    It uses multiple detection strategies to identify different bias types.
+    
+    Supported bias types:
+    - Confirmation bias: Tendency to favor information that confirms existing beliefs
+    - Publication bias: Tendency to publish positive results over negative ones
+    - Selection bias: Bias in selecting participants or studies
+    - Funding bias: Influence of funding sources on research outcomes
+    - Reporting bias: Selective reporting of results
+    
+    The validator employs:
+    - Text analysis algorithms
+    - Pattern recognition
+    - Statistical analysis
+    - Contextual evaluation
+    - Evidence aggregation
+    
+    Attributes:
+        config: ValidationConfig instance with bias detection settings
+        constants: Bias detection constants and patterns
+        bias_types: List of bias types to check (configurable)
+        strategies: Dictionary of detection strategies for each bias type
         
-        # Initialize strategies
-        self.strategies = {
-            "confirmation_bias": ConfirmationBiasStrategy(self.constants),
-            "publication_bias": PublicationBiasStrategy(self.constants),
-            "selection_bias": SelectionBiasStrategy(self.constants),
-            "funding_bias": FundingBiasStrategy(self.constants),
-            "reporting_bias": ReportingBiasStrategy(self.constants)
-        }
+    Example:
+        >>> config = ValidationConfig(bias_detection_threshold=0.85)
+        >>> detector = BiasDetector(config)
+        >>> result = await detector.validate(research_data)
+        >>> print(f"Bias detection score: {result.score:.2f}")
+    """
+
+    def __init__(self, config: ValidationConfig):
+        # Validate and fix config
+        config_validation = ConfigValidator.validate_config(config)
+        if not config_validation.is_valid:
+            logger.warning(f"Configuration validation failed: {config_validation.errors}")
+            self.config = ConfigValidator.validate_and_fix_config(config)
+            logger.info("Configuration has been automatically corrected")
+        else:
+            self.config = config
+        
+        # Log configuration warnings
+        if config_validation.warnings:
+            for warning in config_validation.warnings:
+                logger.warning(f"Configuration warning: {warning}")
+        
+        self.constants = ValidationConstants()
+        self.bias_types = self.config.bias_types_to_check or self.constants.BIAS.BIAS_TYPES
+        
+        # Initialize strategies based on config
+        self.strategies = {}
+        if "confirmation_bias" in self.bias_types:
+            self.strategies["confirmation_bias"] = ConfirmationBiasStrategy(self.constants)
+        if "publication_bias" in self.bias_types:
+            self.strategies["publication_bias"] = PublicationBiasStrategy(self.constants)
+        if "selection_bias" in self.bias_types:
+            self.strategies["selection_bias"] = SelectionBiasStrategy(self.constants)
+        if "funding_bias" in self.bias_types:
+            self.strategies["funding_bias"] = FundingBiasStrategy(self.constants)
+        if "reporting_bias" in self.bias_types:
+            self.strategies["reporting_bias"] = ReportingBiasStrategy(self.constants)
+    
+    @property
+    def name(self) -> str:
+        """Return the validator name."""
+        return "bias_detector"
+    
+    @property
+    def supported_data_types(self) -> List[type]:
+        """Return the supported data types."""
+        return [ResearchData]
 
     @validate_input
     async def validate(self, data: ResearchData) -> ValidationResult:

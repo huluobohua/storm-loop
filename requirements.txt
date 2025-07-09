@@ -1,0 +1,60 @@
+# Core dependencies
+dspy_ai==2.4.9
+wikipedia==1.4.0
+sentence_transformers
+toml
+langchain-text-splitters
+trafilatura
+langchain-huggingface
+qdrant-client
+langchain-qdrant
+numpy==1.26.4
+streamlit==1.22.0
+markdown==3.4.3
+
+# Testing dependencies
+pytest
+pytest-asyncio
+pytest-mock
+
+# Academic validation framework dependencies
+requests  # For external API calls if needed
+asyncio  # For async validation
+logging  # For logging
+dataclasses  # For data structures
+typing  # For type hints
+
+# Production deployment dependencies
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-jose[cryptography]>=3.3.0  # JWT support
+python-multipart>=0.0.6
+bcrypt>=4.0.1
+cryptography>=41.0.0
+httpx>=0.25.0  # Async HTTP client
+redis>=5.0.0  # Redis client
+asyncpg>=0.29.0  # PostgreSQL async driver
+sqlalchemy>=2.0.0
+alembic>=1.12.0  # Database migrations
+prometheus-client>=0.19.0  # Metrics
+psutil>=5.9.0  # System monitoring
+aiohttp>=3.9.0  # Async HTTP
+cachetools>=5.3.0  # Caching utilities
+
+# AWS SDK for cloud integration
+boto3>=1.29.0
+botocore>=1.32.0
+
+# Security and authentication
+authlib>=1.2.0  # OAuth support
+itsdangerous>=2.1.0  # Secure tokens
+
+# Load testing (dev only)
+locust>=2.17.0
+
+# Code quality (dev only)
+ruff>=0.1.0
+black>=23.0.0
+isort>=5.12.0
+mypy>=1.7.0
+bandit>=1.7.0

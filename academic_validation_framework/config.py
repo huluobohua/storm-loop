@@ -304,25 +304,104 @@ class ExpertPanelConfig:
 class ValidationConfig:
     """Centralized configuration for validation framework."""
 
-    # Thresholds
+    # Validation thresholds
     citation_accuracy_threshold: float = 0.95
     prisma_compliance_threshold: float = 0.80
     bias_detection_threshold: float = 0.85
-
-    # Performance
+    confidence_threshold: float = 0.80
+    
+    # Citation validation settings
+    citation_formats: List[str] = None
+    allow_mixed_citation_formats: bool = False
+    strict_doi_validation: bool = True
+    validate_urls: bool = True
+    
+    # PRISMA-specific settings
+    prisma_version: str = "2020"
+    required_prisma_sections: List[str] = None
+    minimum_search_databases: int = 3
+    require_protocol_registration: bool = True
+    
+    # Bias detection settings
+    bias_types_to_check: List[str] = None
+    bias_sensitivity_level: str = "medium"  # low, medium, high
+    check_author_bias: bool = True
+    check_funding_bias: bool = True
+    
+    # Performance settings
     max_concurrent_validations: int = 50
     timeout_seconds: int = 30
     memory_limit_mb: int = 2048
-
+    enable_caching: bool = True
+    cache_ttl_seconds: int = 3600
+    
     # API Configuration
     api_rate_limits: Dict[str, int] = None
     retry_attempts: int = 3
     backoff_factor: float = 2.0
-
+    enable_external_apis: bool = True
+    
+    # Logging and monitoring
+    log_level: str = "INFO"
+    enable_detailed_logging: bool = False
+    track_performance_metrics: bool = True
+    
+    # Error handling
+    fail_fast: bool = False
+    continue_on_error: bool = True
+    max_error_count: int = 10
+    
+    # Output settings
+    include_confidence_scores: bool = True
+    include_detailed_feedback: bool = True
+    generate_reports: bool = True
+    
     def __post_init__(self):
+        """Initialize default values for complex fields."""
         if self.api_rate_limits is None:
             self.api_rate_limits = {
                 'openAlex': 10,  # requests per second
                 'crossref': 5,
                 'institutional': 2
             }
+        
+        if self.citation_formats is None:
+            self.citation_formats = ["APA", "MLA", "Chicago", "Harvard", "IEEE"]
+        
+        if self.required_prisma_sections is None:
+            self.required_prisma_sections = [
+                "title", "abstract", "introduction", "methods", 
+                "results", "discussion", "conclusion", "references"
+            ]
+        
+        if self.bias_types_to_check is None:
+            self.bias_types_to_check = [
+                "confirmation_bias", "selection_bias", "publication_bias",
+                "funding_bias", "author_bias"
+            ]
+        
+        # Validate configuration
+        self._validate_config()
+    
+    def _validate_config(self):
+        """Validate configuration parameters."""
+        if not (0.0 <= self.citation_accuracy_threshold <= 1.0):
+            raise ValueError("citation_accuracy_threshold must be between 0.0 and 1.0")
+        
+        if not (0.0 <= self.prisma_compliance_threshold <= 1.0):
+            raise ValueError("prisma_compliance_threshold must be between 0.0 and 1.0")
+        
+        if not (0.0 <= self.bias_detection_threshold <= 1.0):
+            raise ValueError("bias_detection_threshold must be between 0.0 and 1.0")
+        
+        if self.bias_sensitivity_level not in ["low", "medium", "high"]:
+            raise ValueError("bias_sensitivity_level must be 'low', 'medium', or 'high'")
+        
+        if self.log_level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+            raise ValueError("log_level must be a valid logging level")
+        
+        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        
+        if self.max_concurrent_validations <= 0:
+            raise ValueError("max_concurrent_validations must be positive")

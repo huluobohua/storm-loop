@@ -1,0 +1,180 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: storm-production
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: storm-production
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: fast-ssd
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: storm-production
+spec:
+  serviceName: postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: storm
+        - name: POSTGRES_USER
+          value: storm
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: storm-secrets
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-config
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - storm
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - storm
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: postgres-config
+        configMap:
+          name: postgres-init-config
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 50Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-config
+  namespace: storm-production
+data:
+  init.sql: |
+    -- Create extensions
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+    
+    -- Create schemas
+    CREATE SCHEMA IF NOT EXISTS storm;
+    
+    -- Create tables
+    CREATE TABLE IF NOT EXISTS storm.users (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        email VARCHAR(255) UNIQUE NOT NULL,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        full_name VARCHAR(255),
+        institution VARCHAR(255),
+        role VARCHAR(50) DEFAULT 'user',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE TABLE IF NOT EXISTS storm.research_projects (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID REFERENCES storm.users(id) ON DELETE CASCADE,
+        title VARCHAR(500) NOT NULL,
+        description TEXT,
+        status VARCHAR(50) DEFAULT 'draft',
+        metadata JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE TABLE IF NOT EXISTS storm.articles (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        project_id UUID REFERENCES storm.research_projects(id) ON DELETE CASCADE,
+        title VARCHAR(500) NOT NULL,
+        content TEXT,
+        outline JSONB,
+        citations JSONB,
+        validation_results JSONB,
+        version INTEGER DEFAULT 1,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- Create indexes
+    CREATE INDEX idx_users_email ON storm.users(email);
+    CREATE INDEX idx_users_institution ON storm.users(institution);
+    CREATE INDEX idx_projects_user_id ON storm.research_projects(user_id);
+    CREATE INDEX idx_projects_status ON storm.research_projects(status);
+    CREATE INDEX idx_articles_project_id ON storm.articles(project_id);
+    CREATE INDEX idx_articles_title_trgm ON storm.articles USING gin(title gin_trgm_ops);
+    
+    -- Create updated_at trigger
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    
+    CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON storm.users
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    
+    CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON storm.research_projects
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    
+    CREATE TRIGGER update_articles_updated_at BEFORE UPDATE ON storm.articles
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
