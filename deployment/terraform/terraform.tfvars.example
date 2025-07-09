@@ -1,0 +1,91 @@
+# Example Terraform variables file
+# Copy this to terraform.tfvars and update with your values
+#
+# SECURITY WARNING: Never commit API keys to version control!
+# Provide sensitive values via environment variables:
+# export TF_VAR_anthropic_api_key="your-key-here"
+# export TF_VAR_openai_api_key="your-key-here"
+# export TF_VAR_google_api_key="your-key-here"
+# export TF_VAR_perplexity_api_key="your-key-here"
+
+# AWS Configuration
+aws_region     = "us-west-2"
+aws_account_id = "123456789012"
+
+# Project Configuration
+project_name  = "storm"
+environment   = "production"
+project_owner = "your-team@example.com"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+azs      = ["us-west-2a", "us-west-2b", "us-west-2c"]
+
+# EKS Security Configuration - CRITICAL: Specify your IP ranges
+# NEVER use 0.0.0.0/0 in production - this would expose your cluster to the internet
+# Examples:
+# - Office IP: ["203.0.113.0/24"]
+# - Multiple IPs: ["203.0.113.0/24", "198.51.100.0/24"]
+# - Single IP: ["203.0.113.42/32"]
+allowed_cidr_blocks = ["YOUR_OFFICE_IP/32"]  # REQUIRED - Replace with your actual IP ranges
+
+# EKS Configuration
+eks_cluster_version = "1.28"
+eks_node_groups = {
+  general = {
+    min_size     = 2
+    max_size     = 10
+    desired_size = 3
+    instance_types = ["t3.large"]
+    disk_size    = 100
+  }
+}
+
+# RDS Configuration
+rds_instance_class     = "db.r6g.large"
+rds_allocated_storage  = 100
+rds_engine_version     = "15.4"
+rds_multi_az          = true
+rds_backup_retention  = 30
+
+# ElastiCache Configuration
+elasticache_node_type         = "cache.r6g.large"
+elasticache_num_cache_nodes   = 3
+elasticache_engine_version    = "7.0"
+
+# Domain Configuration
+domain_name = "storm.example.com"
+
+# Monitoring Configuration
+enable_monitoring = true
+enable_logging   = true
+log_retention_days = 30
+
+# Security Configuration
+enable_waf = true
+enable_guardduty = true
+enable_security_hub = true
+
+# Backup Configuration
+backup_retention_days = 30
+enable_point_in_time_recovery = true
+
+# Cost Optimization
+enable_spot_instances = false
+enable_auto_scaling = true
+
+# Tags
+additional_tags = {
+  CostCenter = "engineering"
+  Compliance = "soc2"
+}
+
+# API Keys (REQUIRED - provide via environment variables, NEVER in this file)
+# SECURITY CRITICAL: API keys must NEVER be stored in terraform files
+# Use environment variables ONLY:
+# export TF_VAR_anthropic_api_key="your-actual-key"
+# export TF_VAR_openai_api_key="your-actual-key"
+# export TF_VAR_google_api_key="your-actual-key"
+# export TF_VAR_perplexity_api_key="your-actual-key"
+#
+# DO NOT uncomment or add API key values to this file - they belong in environment variables only
