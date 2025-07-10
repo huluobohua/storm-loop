@@ -1,4 +1,8 @@
-from .academic_rm import CrossrefRM
+try:
+    from .academic_rm import CrossrefRM
+except Exception:  # pragma: no cover - optional dependency
+    CrossrefRM = None  # type: ignore
+
 from .multi_agent_knowledge_curation import MultiAgentKnowledgeCurationModule
 
 __all__ = ["CrossrefRM", "MultiAgentKnowledgeCurationModule"]

@@ -76,9 +76,28 @@ class AcademicSourceService:
         openalex, crossref = await asyncio.gather(openalex_coro, crossref_coro)
         return openalex + crossref
 
-    async def warm_cache(self, queries: List[str], limit: int = DEFAULT_LIMIT) -> None:
-        for q in queries:
-            await self.search_combined(q, limit)
+    async def warm_cache(
+        self, queries: List[str], limit: int = DEFAULT_LIMIT, parallel: int = 5
+    ) -> None:
+        """Preload results for multiple queries concurrently.
+
+        Parameters
+        ----------
+        queries:
+            List of search strings to cache.
+        limit:
+            Maximum results per query.
+        parallel:
+            Maximum number of concurrent fetch operations.
+        """
+
+        semaphore = asyncio.Semaphore(parallel)
+
+        async def _fetch(q: str) -> None:
+            async with semaphore:
+                await self.search_combined(q, limit)
+
+        await asyncio.gather(*(_fetch(q) for q in queries))
 
     async def _fetch_json(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         cache_key = self.key_builder.build_key(url, params)
