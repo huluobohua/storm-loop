@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 import threading
+import os
 
 from .config_validators import STORMMode, ConfigValidator, StrictConfigValidator
 
@@ -48,6 +49,10 @@ class STORMConfig:
         self.quality_gates = True
         self.citation_verification = False
         self.real_time_verification = False
+        
+        # Performance configuration
+        self.cache_warm_parallel = int(os.getenv('STORM_CACHE_PARALLEL', '5'))
+        self.api_rate_limit = int(os.getenv('STORM_API_RATE_LIMIT', '10'))
 
     @property
     def mode(self) -> str:

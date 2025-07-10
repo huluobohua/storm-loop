@@ -77,7 +77,7 @@ class AcademicSourceService:
         return openalex + crossref
 
     async def warm_cache(
-        self, queries: List[str], limit: int = DEFAULT_LIMIT, parallel: int = 5
+        self, queries: List[str], limit: int = DEFAULT_LIMIT, parallel: int | None = None
     ) -> None:
         """Preload results for multiple queries concurrently.
 
@@ -88,16 +88,39 @@ class AcademicSourceService:
         limit:
             Maximum results per query.
         parallel:
-            Maximum number of concurrent fetch operations.
+            Maximum number of concurrent fetch operations. If None, uses config default.
         """
+        import logging
+        from ..storm_config import STORMConfig
+        from .performance_metrics import performance_monitor
+        from .memory_manager import memory_manager
 
-        semaphore = asyncio.Semaphore(parallel)
+        # Use configured parallel value if not specified
+        if parallel is None:
+            config = STORMConfig()
+            parallel = config.cache_warm_parallel
 
-        async def _fetch(q: str) -> None:
-            async with semaphore:
-                await self.search_combined(q, limit)
+        logger = logging.getLogger(__name__)
+        
+        with memory_manager.memory_monitor(f"warm_cache({len(queries)} queries)"):
+            async with performance_monitor.track_warm_cache(len(queries), parallel) as metrics:
+                logger.info(f"Starting warm_cache for {len(queries)} queries with parallel={parallel}")
+                
+                semaphore = asyncio.Semaphore(parallel)
 
-        await asyncio.gather(*(_fetch(q) for q in queries))
+                async def _fetch(q: str) -> None:
+                    async with semaphore:
+                        async with performance_monitor.track_query(metrics):
+                            await self.search_combined(q, limit)
+                            logger.debug(f"Successfully cached query: {q[:50]}...")
+
+                await asyncio.gather(*(_fetch(q) for q in queries), return_exceptions=True)
+                
+                logger.info(
+                    f"Completed warm_cache in {metrics.total_duration_seconds:.2f}s: "
+                    f"{metrics.successful_queries} successful, {metrics.failed_queries} failed, "
+                    f"success rate: {metrics.success_rate:.1f}%"
+                )
 
     async def _fetch_json(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         cache_key = self.key_builder.build_key(url, params)
