@@ -2,9 +2,17 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple, Union, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class AgentNotFoundError(Exception):
+    """Raised when trying to execute a task on a non-existent agent."""
+    
+    def __init__(self, agent_id: str):
+        self.agent_id = agent_id
+        super().__init__(f"No agent registered with id '{agent_id}'")
 
 
 class CoordinationStrategy(ABC):
@@ -39,7 +47,7 @@ class RoundRobinStrategy(CoordinationStrategy):
 class AgentCoordinator:
     """Manages the interactions between the different agents."""
 
-    def __init__(self, strategy: CoordinationStrategy | None = None):
+    def __init__(self, strategy: Optional[CoordinationStrategy] = None):
         self.agents: Dict[str, Any] = {}
         self.strategy = strategy or RoundRobinStrategy()
 
@@ -62,31 +70,22 @@ class AgentCoordinator:
         """Distribute a task to a specific agent asynchronously."""
         agent = self.agents.get(agent_id)
         if not agent:
-            logger.error("No agent registered with id %s", agent_id)
-            return None
+            raise AgentNotFoundError(agent_id)
         try:
             return await agent.execute_task(task)
         except Exception:
             logger.exception("Error executing task %s for agent %s", task, agent_id)
-            return None
+            raise
 
     async def distribute_tasks_parallel(self, assignments: Iterable[Tuple[str, Any]]) -> List[Any]:
         """Distribute multiple tasks to agents in parallel."""
         coros = [self.distribute_task(aid, t) for aid, t in assignments]
-        try:
-            return await asyncio.gather(*coros)
-        except Exception:
-            logger.exception("Error during parallel task distribution")
-            return []
+        return await asyncio.gather(*coros)
 
     async def distribute_tasks(self, tasks: Iterable[Any]) -> List[Any]:
         """Assign tasks using the strategy and process them in parallel."""
         assignments = self.strategy.assign(tasks, self.agents)
-        try:
-            return await self.distribute_tasks_parallel(assignments)
-        except Exception:
-            logger.exception("Error distributing tasks")
-            return []
+        return await self.distribute_tasks_parallel(assignments)
 
     def set_strategy(self, strategy: CoordinationStrategy) -> None:
         """Set the coordination strategy."""
