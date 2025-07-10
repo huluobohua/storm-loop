@@ -4,10 +4,34 @@ Addresses Issue #65: Performance Optimization and Scalability for Academic Resea
 """
 
 import gc
-import psutil
 import logging
 from typing import Optional
 from contextlib import contextmanager
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    # Create stub for when psutil is not available
+    class _PSUtilStub:
+        @staticmethod
+        def virtual_memory():
+            # Return a basic object with minimal interface
+            class _MemoryStub:
+                available = 8 * 1024 * 1024 * 1024  # 8GB fallback
+            return _MemoryStub()
+        
+        class Process:
+            def memory_info(self):
+                class _MemoryInfoStub:
+                    rss = 256 * 1024 * 1024  # 256MB fallback
+                return _MemoryInfoStub()
+            
+            def memory_percent(self):
+                return 10.0  # 10% fallback
+    
+    psutil = _PSUtilStub()  # type: ignore
 
 
 class MemoryManager:
@@ -28,8 +52,14 @@ class MemoryManager:
             self.max_memory_mb = int(available_memory_mb * 0.8)
         else:
             self.max_memory_mb = max_memory_mb
-            
-        self.logger.info(f"Memory manager initialized with limit: {self.max_memory_mb} MB")
+        
+        if not PSUTIL_AVAILABLE:
+            self.logger.warning(
+                f"Memory manager initialized with limit: {self.max_memory_mb} MB "
+                f"(psutil not available, using fallback monitoring)"
+            )
+        else:
+            self.logger.info(f"Memory manager initialized with limit: {self.max_memory_mb} MB")
     
     def get_current_memory_usage_mb(self) -> int:
         """Get current memory usage in MB."""

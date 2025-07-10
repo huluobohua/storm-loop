@@ -37,11 +37,6 @@ except ImportError as e:
     logger = logging.getLogger(__name__)
     logger.info(f"Memory monitoring not available: {e}")
 
-try:
-    import psutil
-except ImportError:
-    logger = logging.getLogger(__name__)
-    logger.info("psutil not available, memory monitoring will be disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -143,14 +138,18 @@ class AcademicSourceService:
 
         async def _fetch_single_query(query: str) -> None:
             async with semaphore:
-                if performance_monitor is not None:
-                    async with performance_monitor.track_query(metrics):
+                try:
+                    if performance_monitor is not None:
+                        async with performance_monitor.track_query(metrics):
+                            await self.search_combined(query, limit)
+                            logger.debug(f"Successfully cached query: {query[:50]}...")
+                    else:
+                        # Fallback without performance monitoring but consistent error handling
                         await self.search_combined(query, limit)
                         logger.debug(f"Successfully cached query: {query[:50]}...")
-                else:
-                    # Fallback without performance monitoring
-                    await self.search_combined(query, limit)
-                    logger.debug(f"Successfully cached query: {query[:50]}...")
+                except Exception as e:
+                    # Consistent error logging for both paths
+                    logger.error(f"Failed to warm cache for query '{query[:50]}...': {e}")
 
         await asyncio.gather(*(_fetch_single_query(q) for q in queries), return_exceptions=True)
 
@@ -198,17 +197,9 @@ class AcademicSourceService:
         """Execute warm_cache without monitoring (fallback mode)."""
         logger.info(f"Starting warm_cache for {len(queries)} queries with parallel={parallel} (fallback mode)")
         
-        semaphore = asyncio.Semaphore(parallel)
+        # Use the same concurrent execution logic but with None metrics
+        await self._execute_concurrent_queries(queries, limit, parallel, None)
         
-        async def _fetch_fallback(query: str) -> None:
-            async with semaphore:
-                try:
-                    await self.search_combined(query, limit)
-                    logger.debug(f"Successfully cached query: {query[:50]}...")
-                except Exception as e:
-                    logger.error(f"Failed to warm cache for query '{query[:50]}...': {e}")
-
-        await asyncio.gather(*(_fetch_fallback(q) for q in queries), return_exceptions=True)
         logger.info(f"Completed warm_cache for {len(queries)} queries")
 
     async def _fetch_json(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
