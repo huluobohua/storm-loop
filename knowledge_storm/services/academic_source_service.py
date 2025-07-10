@@ -104,10 +104,11 @@ class AcademicSourceService:
         """Validate and normalize the parallel parameter."""
         # Use configured parallel value if not specified
         if parallel is None:
-            if STORMConfig is not None:
-                config = STORMConfig()
+            try:
+                from ..storm_config import STORMConfig as Config
+                config = Config()
                 parallel = config.cache_warm_parallel
-            else:
+            except Exception:
                 parallel = 5  # Fallback default
         
         # CRITICAL: Validate parallel parameter to prevent runtime crashes

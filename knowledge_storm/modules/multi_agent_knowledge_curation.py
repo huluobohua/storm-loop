@@ -9,7 +9,7 @@ from knowledge_storm.agents.critic import CriticAgent
 from knowledge_storm.agents.citation_verifier import CitationVerifierAgent
 from knowledge_storm.agents.planner import ResearchPlannerAgent
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, List
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,22 @@ class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
         self.coordinator.register_agent(self.researcher)
         self.coordinator.register_agent(self.critic)
         self.coordinator.register_agent(self.verifier)
+
+        # Optional coordination components for advanced tests
+        try:
+            from ..coordination import (
+                ParallelPlanningCoordinator,
+                StreamingResearchProcessor,
+                AgentPoolManager,
+            )
+
+            self.planning_coordinator = ParallelPlanningCoordinator()
+            self.streaming_processor = StreamingResearchProcessor()
+            self.agent_pool = AgentPoolManager()
+        except Exception:  # pragma: no cover - optional dependency
+            self.planning_coordinator = None
+            self.streaming_processor = None
+            self.agent_pool = None
 
     async def _safely_execute_task(self, agent_id: str, task: str, task_name: str, fallback: Any) -> Any:
         """Run a task through the coordinator, returning fallback on failure."""
@@ -146,3 +162,24 @@ class MultiAgentKnowledgeCurationModule(KnowledgeCurationModule):
         return self._finalize_output(
             plan, research_res, critique_res, verify_res, return_conversation_log
         )
+
+    # --- Optional helper methods used in tests ---
+    async def run_parallel_planning(self, topic: str):
+        if not self.planning_coordinator:
+            raise RuntimeError("Parallel planning not available")
+        return await self.planning_coordinator.run_parallel_planning(topic)
+
+    async def start_streaming_research(self, topic: str):
+        if not self.streaming_processor:
+            raise RuntimeError("Streaming processor not available")
+        return self.streaming_processor.start_streaming_research(topic)
+
+    async def execute_with_agent_pool(self, tasks: List[str], pool_size: int = 3):
+        if not self.agent_pool:
+            raise RuntimeError("Agent pool not available")
+        return await self.agent_pool.execute_with_agent_pool(tasks, pool_size)
+
+    def get_utilization_tracker(self):  # pragma: no cover - simple passthrough
+        if hasattr(self.agent_pool, "get_utilization_tracker"):
+            return self.agent_pool.get_utilization_tracker()
+        return None

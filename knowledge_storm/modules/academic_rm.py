@@ -3,13 +3,24 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, List, Union
 
-import dspy
+try:
+    import dspy  # type: ignore
+    BaseRetrieve = dspy.Retrieve
+    HAS_DSPY = True
+except Exception:  # pragma: no cover - optional dependency
+    dspy = None
+
+    class BaseRetrieve:
+        def __init__(self, k: int = 3, **_: Any) -> None:
+            self.k = k
+
+    HAS_DSPY = False
 
 from ..services.crossref_service import CrossrefService
 from ..services.academic_source_service import SourceQualityScorer
 
 
-class CrossrefRM(dspy.Retrieve):
+class CrossrefRM(BaseRetrieve):
     """Retrieve papers from Crossref and rank by quality."""
 
     def __init__(self, k: int = 3, service: CrossrefService | None = None, scorer: SourceQualityScorer | None = None):
