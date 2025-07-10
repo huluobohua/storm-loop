@@ -3,13 +3,27 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, List, Union
 
-import dspy
+try:  # pragma: no cover - optional dependency
+    import dspy
+    BaseRetrieve = dspy.Retrieve
+except Exception:  # pragma: no cover - fallback when dspy unavailable
+    class BaseRetrieve:
+        """Minimal stub matching dspy.Retrieve interface used in tests."""
+
+        def __init__(self, k: int = 3):
+            self.k = k
+
+        # In the real dspy.Retrieve this would be abstract; here we just
+        # provide a placeholder so methods can be defined without errors.
+        def forward(self, *args, **kwargs):
+            raise NotImplementedError
+
 
 from ..services.crossref_service import CrossrefService
 from ..services.academic_source_service import SourceQualityScorer
 
 
-class CrossrefRM(dspy.Retrieve):
+class CrossrefRM(BaseRetrieve):
     """Retrieve papers from Crossref and rank by quality."""
 
     def __init__(self, k: int = 3, service: CrossrefService | None = None, scorer: SourceQualityScorer | None = None):
@@ -55,6 +69,10 @@ class CrossrefRM(dspy.Retrieve):
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self._search_all(queries))
 
+    async def _run_search_async(self, queries: List[str]) -> List[List[Dict[str, Any]]]:
+        """Asynchronous variant to run searches concurrently."""
+        return await self._search_all(queries)
+
     def _collect_results(self, results: List[List[Dict[str, Any]]], exclude_urls: List[str]) -> List[Dict[str, Any]]:
         return [
             self._build_result(item)
@@ -74,5 +92,16 @@ class CrossrefRM(dspy.Retrieve):
         self.usage += len(queries)
         exclude_urls = exclude_urls or []
         results = self._run_search(queries)
+        collected = self._collect_results(results, exclude_urls)
+        return self._sort_limit(collected)
+
+    async def async_forward(
+        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] | None = None
+    ) -> List[Dict[str, Any]]:
+        """Asynchronous version of :meth:`forward`."""
+        queries = self._normalize_queries(query_or_queries)
+        self.usage += len(queries)
+        exclude_urls = exclude_urls or []
+        results = await self._run_search_async(queries)
         collected = self._collect_results(results, exclude_urls)
         return self._sort_limit(collected)
