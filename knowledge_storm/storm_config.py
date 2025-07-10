@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 import threading
+import os
 
 from .config_validators import STORMMode, ConfigValidator, StrictConfigValidator
 
@@ -48,6 +49,17 @@ class STORMConfig:
         self.quality_gates = True
         self.citation_verification = False
         self.real_time_verification = False
+        
+        # Performance configuration with specific error handling
+        try:
+            self.cache_warm_parallel = int(os.getenv('STORM_CACHE_PARALLEL', '5'))
+            if self.cache_warm_parallel < 1:
+                raise ValueError("STORM_CACHE_PARALLEL must be positive")
+        except (ValueError, TypeError) as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Invalid STORM_CACHE_PARALLEL value, using default 5: {e}")
+            self.cache_warm_parallel = 5
 
     @property
     def mode(self) -> str:
