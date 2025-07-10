@@ -3,17 +3,25 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, List, Union
 
-import dspy
+try:
+    import dspy  # type: ignore
+    RetrieveBase = getattr(dspy, "Retrieve", object)
+except Exception:  # pragma: no cover - optional dependency
+    dspy = None
+
+    class RetrieveBase:  # type: ignore
+        pass
 
 from ..services.crossref_service import CrossrefService
 from ..services.academic_source_service import SourceQualityScorer
 
 
-class CrossrefRM(dspy.Retrieve):
+class CrossrefRM(RetrieveBase):
     """Retrieve papers from Crossref and rank by quality."""
 
     def __init__(self, k: int = 3, service: CrossrefService | None = None, scorer: SourceQualityScorer | None = None):
-        super().__init__(k=k)
+        if dspy is not None and hasattr(RetrieveBase, "__init__"):
+            super().__init__(k=k)
         self.service = service or CrossrefService()
         self.scorer = scorer or SourceQualityScorer()
         self.usage = 0
@@ -55,6 +63,18 @@ class CrossrefRM(dspy.Retrieve):
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self._search_all(queries))
 
+    async def async_forward(
+        self,
+        query_or_queries: Union[str, List[str]],
+        exclude_urls: List[str] | None = None,
+    ) -> List[Dict[str, Any]]:
+        queries = self._normalize_queries(query_or_queries)
+        self.usage += len(queries)
+        exclude_urls = exclude_urls or []
+        results = await self._search_all(queries)
+        collected = self._collect_results(results, exclude_urls)
+        return self._sort_limit(collected)
+
     def _collect_results(self, results: List[List[Dict[str, Any]]], exclude_urls: List[str]) -> List[Dict[str, Any]]:
         return [
             self._build_result(item)
@@ -70,9 +90,7 @@ class CrossrefRM(dspy.Retrieve):
     def forward(
         self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] | None = None
     ) -> List[Dict[str, Any]]:
-        queries = self._normalize_queries(query_or_queries)
-        self.usage += len(queries)
-        exclude_urls = exclude_urls or []
-        results = self._run_search(queries)
-        collected = self._collect_results(results, exclude_urls)
-        return self._sort_limit(collected)
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(
+            self.async_forward(query_or_queries, exclude_urls)
+        )

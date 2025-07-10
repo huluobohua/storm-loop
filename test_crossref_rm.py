@@ -1,4 +1,5 @@
 from unittest.mock import AsyncMock, patch
+import asyncio
 
 import pytest
 
@@ -17,6 +18,9 @@ def test_crossref_rm_ranking():
         results = rm.forward("q")
         assert results[0]["doi"] == "2"
         assert results[1]["doi"] == "1"
+        results_async = asyncio.run(rm.async_forward("q"))
+        assert results_async[0]["doi"] == "2"
+        assert results_async[1]["doi"] == "1"
 
 
 def test_crossref_rm_multiple_queries():
@@ -30,6 +34,9 @@ def test_crossref_rm_multiple_queries():
         assert mock.call_count == 2
         dois = {r["doi"] for r in results}
         assert dois == {"1", "2"}
+        results_async = asyncio.run(rm.async_forward(["a", "b"]))
+        dois_async = {r["doi"] for r in results_async}
+        assert dois_async == {"1", "2"}
 
 
 def test_crossref_rm_exclude_url():
@@ -38,4 +45,6 @@ def test_crossref_rm_exclude_url():
     with patch.object(rm.service, "search_works", new=AsyncMock(return_value=items)):
         results = rm.forward("q", exclude_urls=["https://doi.org/1"])
         assert results == []
+        results_async = asyncio.run(rm.async_forward("q", exclude_urls=["https://doi.org/1"]))
+        assert results_async == []
 
