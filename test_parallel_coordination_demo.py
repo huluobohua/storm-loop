@@ -15,10 +15,31 @@ This serves as the foundation for Issue #100 parallel coordination optimizations
 
 import asyncio
 import time
+from dataclasses import dataclass
 from typing import List, Tuple
 
 import pytest
 from knowledge_storm.agent_coordinator import AgentCoordinator
+
+
+@dataclass
+class AgentResult:
+    """Structured result from agent execution with timing data."""
+    agent_id: str
+    task: float
+    start_time: float
+    end_time: float
+    
+    @classmethod
+    def from_agent_response(cls, response: str) -> "AgentResult":
+        """Parse agent response string into structured data."""
+        parts = response.split("_")
+        return cls(
+            agent_id=parts[1],
+            task=float(parts[3]),
+            start_time=float(parts[5]),
+            end_time=float(parts[7])
+        )
 
 
 class TimestampingAgent:
@@ -35,6 +56,23 @@ class TimestampingAgent:
         return f"agent_{self.agent_id}_task_{task}_start_{start_time:.3f}_end_{end_time:.3f}"
 
 
+def _get_execution_windows(results: List[str]) -> List[Tuple[float, float]]:
+    """Extract execution time windows from agent results."""
+    return [(r.start_time, r.end_time) for r in [AgentResult.from_agent_response(result) for result in results]]
+
+
+def _count_overlaps(windows: List[Tuple[float, float]]) -> int:
+    """Count overlapping execution windows to verify parallel execution."""
+    overlaps = 0
+    for i in range(len(windows)):
+        for j in range(i + 1, len(windows)):
+            start1, end1 = windows[i]
+            start2, end2 = windows[j]
+            if start1 < end2 and start2 < end1:
+                overlaps += 1
+    return overlaps
+
+
 @pytest.mark.asyncio
 async def test_parallel_task_execution():
     """Demonstrate that tasks are executed concurrently by analyzing execution timestamps."""
@@ -42,33 +80,12 @@ async def test_parallel_task_execution():
     for i in range(3):
         coordinator.register_agent(TimestampingAgent(f"a{i}"))
 
-    assignments = [(f"a{i}", i) for i in range(3)]  # Use task IDs instead of delays
+    assignments = [(f"a{i}", i) for i in range(3)]
     results = await coordinator.distribute_tasks_parallel(assignments)
-
-    # Verify all tasks completed successfully
-    assert len(results) == 3
-    assert all("agent_" in result for result in results)
-
-    # Parse timestamps from results
-    execution_windows: List[Tuple[float, float]] = []
-    for result in results:
-        parts = result.split("_")
-        start_time = float(parts[5])  # start_X.XXX
-        end_time = float(parts[7])    # end_X.XXX
-        execution_windows.append((start_time, end_time))
-
-    # Verify parallel execution: at least two tasks should have overlapping execution windows
-    overlaps = 0
-    for i in range(len(execution_windows)):
-        for j in range(i + 1, len(execution_windows)):
-            start1, end1 = execution_windows[i]
-            start2, end2 = execution_windows[j]
-            
-            # Check if execution windows overlap
-            if start1 < end2 and start2 < end1:
-                overlaps += 1
     
-    # At least one pair should overlap if running in parallel
+    assert len(results) == 3 and all("agent_" in result for result in results)
+    execution_windows = _get_execution_windows(results)
+    overlaps = _count_overlaps(execution_windows)
     assert overlaps > 0, f"No overlapping execution detected. Windows: {execution_windows}"
 
 
