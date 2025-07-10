@@ -1,16 +1,16 @@
 import os
-from typing import Protocol
+from typing import Protocol, Optional
 
 from .storm_config import STORMConfig
 
 
 class EnvironmentReader(Protocol):
-    def get_storm_mode(self) -> str | None:
+    def get_storm_mode(self) -> Optional[str]:
         ...
 
 
 class ProductionEnvironmentReader:
-    def get_storm_mode(self) -> str | None:
+    def get_storm_mode(self) -> Optional[str]:
         return os.getenv("STORM_MODE")
 
 

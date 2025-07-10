@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple, Union, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class RoundRobinStrategy(CoordinationStrategy):
 class AgentCoordinator:
     """Manages the interactions between the different agents."""
 
-    def __init__(self, strategy: CoordinationStrategy | None = None):
+    def __init__(self, strategy: Optional[CoordinationStrategy] = None):
         self.agents: Dict[str, Any] = {}
         self.strategy = strategy or RoundRobinStrategy()
 
