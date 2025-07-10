@@ -5,7 +5,7 @@ Addresses Issue #65: Performance Optimization and Scalability for Academic Resea
 
 import time
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 import logging
 from contextlib import asynccontextmanager
@@ -41,7 +41,7 @@ class PerformanceMonitor:
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self._metrics_history: list[WarmCacheMetrics] = []
+        self._metrics_history: List[WarmCacheMetrics] = []
         self._current_concurrent_queries = 0
         self._max_concurrent_queries = 0
     
@@ -129,7 +129,7 @@ class PerformanceMonitor:
                 f"for {metrics.total_queries} queries"
             )
     
-    def get_recent_metrics(self, limit: int = 10) -> list[WarmCacheMetrics]:
+    def get_recent_metrics(self, limit: int = 10) -> List[WarmCacheMetrics]:
         """Get the most recent performance metrics."""
         return self._metrics_history[-limit:]
     

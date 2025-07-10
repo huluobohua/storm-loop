@@ -14,6 +14,35 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     aiohttp = None
 
+# Performance optimization imports with specific error handling
+STORMConfig = None
+performance_monitor = None
+memory_manager = None
+
+try:
+    from ..storm_config import STORMConfig
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.warning(f"STORMConfig not available, using fallback defaults: {e}")
+
+try:
+    from .performance_metrics import performance_monitor
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.info(f"Performance monitoring not available: {e}")
+
+try:
+    from .memory_manager import memory_manager
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.info(f"Memory monitoring not available: {e}")
+
+try:
+    import psutil
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.info("psutil not available, memory monitoring will be disabled")
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_LIMIT = 5
@@ -76,8 +105,60 @@ class AcademicSourceService:
         openalex, crossref = await asyncio.gather(openalex_coro, crossref_coro)
         return openalex + crossref
 
+    def _validate_parallel_parameter(self, parallel: Optional[int], logger: logging.Logger) -> int:
+        """Validate and normalize the parallel parameter."""
+        # Use configured parallel value if not specified
+        if parallel is None:
+            if STORMConfig is not None:
+                config = STORMConfig()
+                parallel = config.cache_warm_parallel
+            else:
+                parallel = 5  # Fallback default
+        
+        # CRITICAL: Validate parallel parameter to prevent runtime crashes
+        if not isinstance(parallel, int) or parallel < 1:
+            raise ValueError(
+                f"parallel parameter must be a positive integer, got: {parallel} "
+                f"(type: {type(parallel).__name__})"
+            )
+        
+        # Reasonable upper limit to prevent resource exhaustion
+        if parallel > 100:
+            logger.warning(
+                f"Very high parallelism requested ({parallel}). "
+                f"Consider using a lower value for better resource management."
+            )
+        
+        return parallel
+
+    async def _execute_concurrent_queries(
+        self, 
+        queries: List[str], 
+        limit: int, 
+        parallel: int, 
+        metrics: Any
+    ) -> None:
+        """Execute queries concurrently with proper semaphore control."""
+        semaphore = asyncio.Semaphore(parallel)
+
+        async def _fetch_single_query(query: str) -> None:
+            async with semaphore:
+                if performance_monitor is not None:
+                    async with performance_monitor.track_query(metrics):
+                        await self.search_combined(query, limit)
+                        logger.debug(f"Successfully cached query: {query[:50]}...")
+                else:
+                    # Fallback without performance monitoring
+                    await self.search_combined(query, limit)
+                    logger.debug(f"Successfully cached query: {query[:50]}...")
+
+        await asyncio.gather(*(_fetch_single_query(q) for q in queries), return_exceptions=True)
+
     async def warm_cache(
-        self, queries: List[str], limit: int = DEFAULT_LIMIT, parallel: int | None = None
+        self, 
+        queries: List[str], 
+        limit: int = DEFAULT_LIMIT, 
+        parallel: Optional[int] = None
     ) -> None:
         """Preload results for multiple queries concurrently.
 
@@ -90,37 +171,45 @@ class AcademicSourceService:
         parallel:
             Maximum number of concurrent fetch operations. If None, uses config default.
         """
-        import logging
-        from ..storm_config import STORMConfig
-        from .performance_metrics import performance_monitor
-        from .memory_manager import memory_manager
-
-        # Use configured parallel value if not specified
-        if parallel is None:
-            config = STORMConfig()
-            parallel = config.cache_warm_parallel
-
-        logger = logging.getLogger(__name__)
+        parallel = self._validate_parallel_parameter(parallel, logger)
         
-        with memory_manager.memory_monitor(f"warm_cache({len(queries)} queries)"):
-            async with performance_monitor.track_warm_cache(len(queries), parallel) as metrics:
-                logger.info(f"Starting warm_cache for {len(queries)} queries with parallel={parallel}")
-                
-                semaphore = asyncio.Semaphore(parallel)
+        # Use performance monitoring if available, otherwise run directly
+        if memory_manager is not None and performance_monitor is not None:
+            with memory_manager.memory_monitor(f"warm_cache({len(queries)} queries)"):
+                async with performance_monitor.track_warm_cache(len(queries), parallel) as metrics:
+                    await self._execute_warm_cache_with_monitoring(queries, limit, parallel, metrics)
+        else:
+            # Fallback without monitoring
+            await self._execute_warm_cache_fallback(queries, limit, parallel)
 
-                async def _fetch(q: str) -> None:
-                    async with semaphore:
-                        async with performance_monitor.track_query(metrics):
-                            await self.search_combined(q, limit)
-                            logger.debug(f"Successfully cached query: {q[:50]}...")
+    async def _execute_warm_cache_with_monitoring(self, queries: List[str], limit: int, parallel: int, metrics):
+        """Execute warm_cache with full monitoring capabilities."""
+        logger.info(f"Starting warm_cache for {len(queries)} queries with parallel={parallel}")
+        
+        await self._execute_concurrent_queries(queries, limit, parallel, metrics)
+        
+        logger.info(
+            f"Completed warm_cache in {metrics.total_duration_seconds:.2f}s: "
+            f"{metrics.successful_queries} successful, {metrics.failed_queries} failed, "
+            f"success rate: {metrics.success_rate:.1f}%"
+        )
 
-                await asyncio.gather(*(_fetch(q) for q in queries), return_exceptions=True)
-                
-                logger.info(
-                    f"Completed warm_cache in {metrics.total_duration_seconds:.2f}s: "
-                    f"{metrics.successful_queries} successful, {metrics.failed_queries} failed, "
-                    f"success rate: {metrics.success_rate:.1f}%"
-                )
+    async def _execute_warm_cache_fallback(self, queries: List[str], limit: int, parallel: int):
+        """Execute warm_cache without monitoring (fallback mode)."""
+        logger.info(f"Starting warm_cache for {len(queries)} queries with parallel={parallel} (fallback mode)")
+        
+        semaphore = asyncio.Semaphore(parallel)
+        
+        async def _fetch_fallback(query: str) -> None:
+            async with semaphore:
+                try:
+                    await self.search_combined(query, limit)
+                    logger.debug(f"Successfully cached query: {query[:50]}...")
+                except Exception as e:
+                    logger.error(f"Failed to warm cache for query '{query[:50]}...': {e}")
+
+        await asyncio.gather(*(_fetch_fallback(q) for q in queries), return_exceptions=True)
+        logger.info(f"Completed warm_cache for {len(queries)} queries")
 
     async def _fetch_json(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         cache_key = self.key_builder.build_key(url, params)
