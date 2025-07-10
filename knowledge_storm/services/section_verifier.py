@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any, Dict, List
+import asyncio
 
 from .citation_verifier import CitationVerifier
 
@@ -16,8 +17,15 @@ class SectionCitationVerifier:
         self.verifier = verifier
 
     def verify_section(self, section_text: str, info_list: List[Any]) -> List[Dict[str, Any]]:
+        """Synchronously verify citations within ``section_text``."""
+        return asyncio.run(self.verify_section_async(section_text, info_list))
+
+    async def verify_section_async(self, section_text: str, info_list: List[Any]) -> List[Dict[str, Any]]:
+        """Verify citations concurrently using async calls."""
         indices = self._extract_citation_indices(section_text)
-        return self._verify_citations_by_indices(indices, info_list)
+        tasks = [self._verify_single_citation_async(i, info_list) for i in indices]
+        results = await asyncio.gather(*tasks)
+        return [r for r in results if r]
 
     def _extract_citation_indices(self, section_text: str) -> List[int]:
         indices: List[int] = []
@@ -41,6 +49,12 @@ class SectionCitationVerifier:
             return None
         snippet = self._get_snippet_text(info_list[idx - 1])
         return self.verifier.verify_citation(snippet, {"text": snippet})
+
+    async def _verify_single_citation_async(self, idx: int, info_list: List[Any]) -> Dict[str, Any] | None:
+        if not (0 < idx <= len(info_list)):
+            return None
+        snippet = self._get_snippet_text(info_list[idx - 1])
+        return await self.verifier.verify_citation_async(snippet, {"text": snippet})
 
     def _get_snippet_text(self, info_item: Any) -> str:
         return info_item.snippets[0] if info_item.snippets else ""

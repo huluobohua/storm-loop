@@ -79,3 +79,17 @@ def test_extract_invalid_citation_indices(caplog):
 
 def test_threshold_from_config():
     assert VerificationConfig.VERIFICATION_THRESHOLD == 0.7
+
+
+def test_verify_section_async(monkeypatch):
+    verifier = SectionCitationVerifier(CitationVerifier())
+
+    async def mock_verify_async(claim, source):
+        return {"verified": True}
+
+    monkeypatch.setattr(verifier.verifier, "verify_citation_async", mock_verify_async)
+
+    info = [StormInformation("u", "d", ["Text"], "t")]
+    results = asyncio.run(verifier.verify_section_async("Text [1]", info))
+
+    assert results == [{"verified": True}]
