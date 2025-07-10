@@ -16,10 +16,10 @@ This serves as the foundation for Issue #100 parallel coordination optimizations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import pytest
-from knowledge_storm.agent_coordinator import AgentCoordinator
+from knowledge_storm.agent_coordinator import AgentCoordinator, AgentNotFoundError
 
 
 @dataclass
@@ -29,17 +29,6 @@ class AgentResult:
     task: float
     start_time: float
     end_time: float
-    
-    @classmethod
-    def from_agent_response(cls, response: str) -> "AgentResult":
-        """Parse agent response string into structured data."""
-        parts = response.split("_")
-        return cls(
-            agent_id=parts[1],
-            task=float(parts[3]),
-            start_time=float(parts[5]),
-            end_time=float(parts[7])
-        )
 
 
 class TimestampingAgent:
@@ -49,16 +38,22 @@ class TimestampingAgent:
         self.agent_id = agent_id
         self.delay = delay
 
-    async def execute_task(self, task: float) -> str:
+    async def execute_task(self, task: float) -> AgentResult:
+        """Execute task and return structured result with timing data."""
         start_time = time.perf_counter()
         await asyncio.sleep(self.delay)
         end_time = time.perf_counter()
-        return f"agent_{self.agent_id}_task_{task}_start_{start_time:.3f}_end_{end_time:.3f}"
+        return AgentResult(
+            agent_id=self.agent_id,
+            task=task,
+            start_time=start_time,
+            end_time=end_time
+        )
 
 
-def _get_execution_windows(results: List[str]) -> List[Tuple[float, float]]:
+def _get_execution_windows(results: List[AgentResult]) -> List[Tuple[float, float]]:
     """Extract execution time windows from agent results."""
-    return [(r.start_time, r.end_time) for r in [AgentResult.from_agent_response(result) for result in results]]
+    return [(r.start_time, r.end_time) for r in results]
 
 
 def _count_overlaps(windows: List[Tuple[float, float]]) -> int:
@@ -83,7 +78,7 @@ async def test_parallel_task_execution():
     assignments = [(f"a{i}", i) for i in range(3)]
     results = await coordinator.distribute_tasks_parallel(assignments)
     
-    assert len(results) == 3 and all("agent_" in result for result in results)
+    assert len(results) == 3 and all(isinstance(result, AgentResult) for result in results)
     execution_windows = _get_execution_windows(results)
     overlaps = _count_overlaps(execution_windows)
     assert overlaps > 0, f"No overlapping execution detected. Windows: {execution_windows}"
@@ -95,9 +90,10 @@ async def test_distribute_parallel_with_no_agents():
     coordinator = AgentCoordinator()
     assignments = [("nonexistent", 1)]
     
-    # The method should return a list with None values for failed tasks
-    results = await coordinator.distribute_tasks_parallel(assignments)
-    assert results == [None]  # Failed task returns None
+    # Should raise AgentNotFoundError for nonexistent agent
+    with pytest.raises(AgentNotFoundError) as exc_info:
+        await coordinator.distribute_tasks_parallel(assignments)
+    assert exc_info.value.agent_id == "nonexistent"
 
 
 @pytest.mark.asyncio
@@ -122,7 +118,7 @@ async def test_distribute_parallel_with_more_tasks_than_agents():
     results = await coordinator.distribute_tasks_parallel(assignments)
     
     assert len(results) == 4
-    assert all("agent_" in result for result in results)
+    assert all(isinstance(result, AgentResult) and result.agent_id.startswith("a") for result in results)
 
 
 @pytest.mark.asyncio
@@ -135,4 +131,4 @@ async def test_distribute_parallel_with_single_agent():
     results = await coordinator.distribute_tasks_parallel(assignments)
     
     assert len(results) == 2
-    assert all("agent_a1" in result for result in results)
+    assert all(isinstance(result, AgentResult) and result.agent_id == "a1" for result in results)
