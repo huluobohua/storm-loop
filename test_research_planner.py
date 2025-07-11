@@ -78,15 +78,6 @@ def test_multi_agent_module_returns_plan():
     import pytest
 
     # Provide minimal dspy modules so import does not fail
-    dspy_mod = types.ModuleType("dspy")
-    dsp_mod = types.ModuleType("dspy.dsp")
-    modules_mod = types.ModuleType("dspy.dsp.modules")
-    lm_mod = types.ModuleType("dspy.dsp.modules.lm")
-    dspy_mod.dsp = dsp_mod
-    sys.modules.setdefault("dspy", dspy_mod)
-    sys.modules.setdefault("dspy.dsp", dsp_mod)
-    sys.modules.setdefault("dspy.dsp.modules", modules_mod)
-    sys.modules.setdefault("dspy.dsp.modules.lm", lm_mod)
 
     mod = pytest.importorskip("knowledge_storm.modules.multi_agent_knowledge_curation")
     MultiAgentKnowledgeCurationModule = mod.MultiAgentKnowledgeCurationModule
