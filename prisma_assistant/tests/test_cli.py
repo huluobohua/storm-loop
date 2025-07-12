@@ -44,9 +44,12 @@ def test_screen_command_help():
 def test_init_command_execution():
     """Test that the init command executes without errors."""
     runner = CliRunner()
-    result = runner.invoke(cli, ["init", "--topic", "test topic", "--domain", "test"])
-    assert result.exit_code == 0
-    assert "Initialized project on 'test topic' in domain 'test'" in result.output
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ["init", "--topic", "test topic", "--domain", "general"])
+        assert result.exit_code == 0
+        assert "Initializing PRISMA systematic review project" in result.output
+        assert "Topic: test topic" in result.output
+        assert "Domain: general" in result.output
 
 
 def test_screen_command_validation():

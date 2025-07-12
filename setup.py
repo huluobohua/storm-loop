@@ -4,8 +4,8 @@ setup(
     name="storm-loop",
     version="0.1.0",
     description="STORM-Academic Hybrid System with PRISMA Assistant",
-    author="Your Name",
-    author_email="your.email@example.com",
+    author="Melvin Breton",
+    author_email="126022745+huluobohua@users.noreply.github.com",
     packages=find_packages(include=[
         "knowledge_storm*",
         "prisma_assistant*",

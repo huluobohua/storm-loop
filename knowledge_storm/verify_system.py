@@ -1,0 +1,674 @@
+"""
+VERIFY: Validated, Efficient Research with Iterative Fact-checking and Yield optimization
+
+A pragmatic research system that focuses on verification over generation,
+targeted fixes over wholesale iteration, and learning from past research.
+"""
+
+import asyncio
+import json
+import re
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple, Any
+import hashlib
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class Claim:
+    """A factual claim that needs verification."""
+    text: str
+    context: str  # Surrounding text for context
+    source_cited: Optional[str] = None
+    confidence: float = 0.0
+    verification_status: str = "unverified"  # unverified, verified, disputed, unsupported
+    evidence: List[str] = field(default_factory=list)
+    location: Optional[Tuple[int, int]] = None  # (paragraph, sentence) indices
+
+
+@dataclass
+class VerificationResult:
+    """Result of fact verification."""
+    claim: Claim
+    is_supported: bool
+    confidence: float
+    supporting_sources: List[str]
+    suggested_fix: Optional[str] = None
+    severity: str = "info"  # info, warning, error
+
+
+@dataclass
+class ResearchPattern:
+    """Learned pattern from successful research."""
+    pattern_type: str  # structure, source_quality, claim_density, etc.
+    domain: str
+    success_metric: float
+    pattern_data: Dict[str, Any]
+    usage_count: int = 0
+    last_used: Optional[datetime] = None
+
+
+class FactChecker:
+    """
+    Verify claims against actual sources instead of checking formatting.
+    This is what actually matters for research quality.
+    """
+    
+    def __init__(self, retrieval_module=None):
+        self.retrieval_module = retrieval_module
+        self.verified_claims_cache = {}
+        
+    async def verify_research(self, research_text: str, sources: List[Dict]) -> List[VerificationResult]:
+        """Verify all claims in research text against provided sources."""
+        # Extract claims
+        claims = self._extract_claims(research_text)
+        
+        # Verify each claim
+        results = []
+        for claim in claims:
+            # Check cache first
+            claim_hash = self._hash_claim(claim)
+            if claim_hash in self.verified_claims_cache:
+                results.append(self.verified_claims_cache[claim_hash])
+                continue
+                
+            # Verify against sources
+            result = await self._verify_single_claim(claim, sources)
+            
+            # Cache result
+            self.verified_claims_cache[claim_hash] = result
+            results.append(result)
+            
+        return results
+    
+    def _extract_claims(self, text: str) -> List[Claim]:
+        """Extract factual claims from research text."""
+        claims = []
+        
+        # Split into paragraphs and sentences
+        paragraphs = text.split('\n\n')
+        
+        for p_idx, paragraph in enumerate(paragraphs):
+            sentences = re.split(r'(?<=[.!?])\s+', paragraph)
+            
+            for s_idx, sentence in enumerate(sentences):
+                # Look for factual claim patterns
+                if self._is_factual_claim(sentence):
+                    # Extract any cited source
+                    source_match = re.search(r'\[([^\]]+)\]|\(([^)]+)\)', sentence)
+                    source_cited = source_match.group(1) if source_match else None
+                    
+                    claims.append(Claim(
+                        text=sentence,
+                        context=paragraph,
+                        source_cited=source_cited,
+                        location=(p_idx, s_idx)
+                    ))
+        
+        return claims
+    
+    def _is_factual_claim(self, sentence: str) -> bool:
+        """Determine if a sentence contains a factual claim."""
+        # Indicators of factual claims
+        factual_patterns = [
+            r'\d+%',  # Percentages
+            r'\$[\d,]+',  # Dollar amounts
+            r'\b\d{4}\b',  # Years
+            r'\b(study|research|report|survey|analysis)\b',
+            r'\b(found|showed|revealed|demonstrated|indicated)\b',
+            r'\b(increased|decreased|reduced|improved)\b',
+            r'\b(according to|based on|as reported)\b',
+        ]
+        
+        # Check if sentence contains factual indicators
+        for pattern in factual_patterns:
+            if re.search(pattern, sentence, re.IGNORECASE):
+                return True
+                
+        return False
+    
+    async def _verify_single_claim(self, claim: Claim, sources: List[Dict]) -> VerificationResult:
+        """Verify a single claim against sources."""
+        supporting_sources = []
+        
+        # Check against provided sources
+        for source in sources:
+            if self._claim_supported_by_source(claim, source):
+                supporting_sources.append(source.get('url', source.get('title', 'Unknown source')))
+        
+        # If no supporting sources found and we have retrieval capability
+        if not supporting_sources and self.retrieval_module:
+            # Try to find supporting evidence
+            search_results = await self._search_for_evidence(claim)
+            supporting_sources.extend(search_results)
+        
+        # Determine verification status
+        is_supported = len(supporting_sources) > 0
+        confidence = min(1.0, len(supporting_sources) * 0.3)  # More sources = higher confidence
+        
+        # Generate fix if needed
+        suggested_fix = None
+        severity = "info"
+        
+        if not is_supported:
+            severity = "error"
+            if claim.source_cited:
+                suggested_fix = f"Claim cites '{claim.source_cited}' but cannot be verified. Please check source or revise claim."
+            else:
+                suggested_fix = f"Add citation for claim: '{claim.text[:50]}...'"
+        elif confidence < 0.5:
+            severity = "warning"
+            suggested_fix = f"Consider adding more sources to support: '{claim.text[:50]}...'"
+        
+        return VerificationResult(
+            claim=claim,
+            is_supported=is_supported,
+            confidence=confidence,
+            supporting_sources=supporting_sources,
+            suggested_fix=suggested_fix,
+            severity=severity
+        )
+    
+    def _claim_supported_by_source(self, claim: Claim, source: Dict) -> bool:
+        """Check if a claim is supported by a specific source."""
+        source_text = source.get('content', '') + source.get('snippet', '')
+        
+        # Simple keyword matching - in production, use semantic similarity
+        claim_keywords = set(word.lower() for word in claim.text.split() 
+                           if len(word) > 3 and word.isalnum())
+        source_keywords = set(word.lower() for word in source_text.split() 
+                            if len(word) > 3 and word.isalnum())
+        
+        # Check overlap
+        overlap = len(claim_keywords & source_keywords)
+        overlap_ratio = overlap / len(claim_keywords) if claim_keywords else 0
+        
+        return overlap_ratio > 0.3  # 30% keyword overlap threshold
+    
+    async def _search_for_evidence(self, claim: Claim) -> List[str]:
+        """Search for evidence to support a claim."""
+        # This would use the retrieval module to search for supporting evidence
+        # For now, return empty list
+        return []
+    
+    def _hash_claim(self, claim: Claim) -> str:
+        """Generate hash for claim caching."""
+        return hashlib.md5(claim.text.encode()).hexdigest()
+
+
+class ResearchMemory:
+    """
+    Learn from past research to improve future generation.
+    This is more valuable than blind iteration.
+    """
+    
+    def __init__(self, storage_path: Path = Path("research_memory")):
+        self.storage_path = storage_path
+        self.storage_path.mkdir(exist_ok=True)
+        
+        self.patterns: Dict[str, List[ResearchPattern]] = {}
+        self.domain_knowledge: Dict[str, Dict] = {}
+        self.successful_structures: List[Dict] = []
+        
+        self._load_memory()
+    
+    def get_relevant_context(self, topic: str, domain: str = "general") -> Dict[str, Any]:
+        """Get relevant patterns and knowledge for a new research topic."""
+        context = {
+            "domain_patterns": self.patterns.get(domain, []),
+            "successful_structures": self._get_similar_structures(topic),
+            "domain_knowledge": self.domain_knowledge.get(domain, {}),
+            "common_pitfalls": self._get_common_pitfalls(domain)
+        }
+        
+        # Sort patterns by success metric and recency
+        context["domain_patterns"].sort(
+            key=lambda p: (p.success_metric, p.usage_count), 
+            reverse=True
+        )
+        
+        return context
+    
+    def learn_from_research(self, 
+                          research_text: str, 
+                          verification_results: List[VerificationResult],
+                          domain: str = "general",
+                          user_rating: Optional[float] = None):
+        """Learn patterns from completed research."""
+        
+        # Calculate success metrics
+        total_claims = len(verification_results)
+        verified_claims = sum(1 for r in verification_results if r.is_supported)
+        verification_rate = verified_claims / total_claims if total_claims > 0 else 0
+        
+        # Extract structural patterns
+        structure_pattern = self._extract_structure_pattern(research_text)
+        
+        # Extract source quality patterns
+        source_pattern = self._extract_source_pattern(verification_results)
+        
+        # Store patterns
+        patterns = [
+            ResearchPattern(
+                pattern_type="structure",
+                domain=domain,
+                success_metric=user_rating or verification_rate,
+                pattern_data=structure_pattern,
+                last_used=datetime.now()
+            ),
+            ResearchPattern(
+                pattern_type="source_quality",
+                domain=domain,
+                success_metric=verification_rate,
+                pattern_data=source_pattern,
+                last_used=datetime.now()
+            )
+        ]
+        
+        # Add to memory
+        if domain not in self.patterns:
+            self.patterns[domain] = []
+        self.patterns[domain].extend(patterns)
+        
+        # Update domain knowledge
+        self._update_domain_knowledge(domain, research_text, verification_results)
+        
+        # Save to disk
+        self._save_memory()
+    
+    def _extract_structure_pattern(self, research_text: str) -> Dict:
+        """Extract structural patterns from successful research."""
+        sections = research_text.split('\n\n')
+        
+        return {
+            "section_count": len(sections),
+            "avg_section_length": sum(len(s.split()) for s in sections) / len(sections),
+            "has_introduction": any("introduction" in s.lower() for s in sections[:3]),
+            "has_conclusion": any("conclusion" in s.lower() for s in sections[-3:]),
+            "citation_density": len(re.findall(r'\[[^\]]+\]|\([^)]+\)', research_text)) / len(sections)
+        }
+    
+    def _extract_source_pattern(self, verification_results: List[VerificationResult]) -> Dict:
+        """Extract patterns about source usage."""
+        source_types = {}
+        for result in verification_results:
+            for source in result.supporting_sources:
+                source_type = self._classify_source(source)
+                source_types[source_type] = source_types.get(source_type, 0) + 1
+        
+        return {
+            "source_diversity": len(source_types),
+            "primary_source_type": max(source_types.items(), key=lambda x: x[1])[0] if source_types else "none",
+            "avg_sources_per_claim": sum(len(r.supporting_sources) for r in verification_results) / len(verification_results) if verification_results else 0
+        }
+    
+    def _classify_source(self, source: str) -> str:
+        """Classify source type."""
+        if "arxiv" in source.lower():
+            return "preprint"
+        elif "doi.org" in source.lower():
+            return "academic"
+        elif any(domain in source.lower() for domain in [".edu", "scholar", "pubmed"]):
+            return "academic"
+        elif any(domain in source.lower() for domain in [".gov", ".org"]):
+            return "institutional"
+        else:
+            return "general"
+    
+    def _get_similar_structures(self, topic: str) -> List[Dict]:
+        """Find similar successful research structures."""
+        # In production, use semantic similarity
+        # For now, return recent successful structures
+        return self.successful_structures[-5:]  # Last 5 successful structures
+    
+    def _get_common_pitfalls(self, domain: str) -> List[str]:
+        """Get common pitfalls for a domain."""
+        # Analyze failed patterns
+        if domain not in self.patterns:
+            return []
+            
+        failed_patterns = [p for p in self.patterns[domain] if p.success_metric < 0.5]
+        
+        pitfalls = []
+        for pattern in failed_patterns:
+            if pattern.pattern_type == "structure" and pattern.pattern_data.get("citation_density", 1) < 0.5:
+                pitfalls.append("Low citation density - aim for at least one citation per major claim")
+            if pattern.pattern_type == "source_quality" and pattern.pattern_data.get("source_diversity", 1) < 2:
+                pitfalls.append("Limited source diversity - include multiple source types")
+                
+        return pitfalls
+    
+    def _update_domain_knowledge(self, domain: str, research_text: str, verification_results: List[VerificationResult]):
+        """Update domain-specific knowledge."""
+        if domain not in self.domain_knowledge:
+            self.domain_knowledge[domain] = {
+                "common_sources": {},
+                "terminology": set(),
+                "fact_patterns": []
+            }
+        
+        # Track successful sources
+        for result in verification_results:
+            if result.is_supported:
+                for source in result.supporting_sources:
+                    self.domain_knowledge[domain]["common_sources"][source] = \
+                        self.domain_knowledge[domain]["common_sources"].get(source, 0) + 1
+        
+        # Extract domain terminology
+        # In production, use NLP for better extraction
+        words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', research_text)
+        self.domain_knowledge[domain]["terminology"].update(words)
+    
+    def _save_memory(self):
+        """Save memory to disk."""
+        memory_data = {
+            "patterns": {
+                domain: [
+                    {
+                        "pattern_type": p.pattern_type,
+                        "success_metric": p.success_metric,
+                        "pattern_data": p.pattern_data,
+                        "usage_count": p.usage_count,
+                        "last_used": p.last_used.isoformat() if p.last_used else None
+                    }
+                    for p in patterns
+                ]
+                for domain, patterns in self.patterns.items()
+            },
+            "domain_knowledge": {
+                domain: {
+                    **knowledge,
+                    "terminology": list(knowledge.get("terminology", set()))
+                }
+                for domain, knowledge in self.domain_knowledge.items()
+            },
+            "successful_structures": self.successful_structures
+        }
+        
+        with open(self.storage_path / "memory.json", "w") as f:
+            json.dump(memory_data, f, indent=2)
+    
+    def _load_memory(self):
+        """Load memory from disk."""
+        memory_file = self.storage_path / "memory.json"
+        if not memory_file.exists():
+            return
+            
+        try:
+            with open(memory_file, "r") as f:
+                memory_data = json.load(f)
+                
+            # Reconstruct patterns
+            for domain, patterns in memory_data.get("patterns", {}).items():
+                self.patterns[domain] = [
+                    ResearchPattern(
+                        pattern_type=p["pattern_type"],
+                        domain=domain,
+                        success_metric=p["success_metric"],
+                        pattern_data=p["pattern_data"],
+                        usage_count=p.get("usage_count", 0),
+                        last_used=datetime.fromisoformat(p["last_used"]) if p.get("last_used") else None
+                    )
+                    for p in patterns
+                ]
+            
+            # Load domain knowledge
+            self.domain_knowledge = {
+                domain: {
+                    **knowledge,
+                    "terminology": set(knowledge.get("terminology", []))
+                }
+                for domain, knowledge in memory_data.get("domain_knowledge", {}).items()
+            }
+            
+            self.successful_structures = memory_data.get("successful_structures", [])
+            
+        except Exception as e:
+            logger.error(f"Error loading memory: {e}")
+
+
+class TargetedFixer:
+    """
+    Fix only what's broken instead of regenerating everything.
+    This is more efficient and preserves good content.
+    """
+    
+    def __init__(self, lm_model=None):
+        self.lm_model = lm_model
+    
+    async def fix_issues(self, 
+                        research_text: str, 
+                        verification_results: List[VerificationResult]) -> str:
+        """Fix only the specific issues identified by verification."""
+        
+        # Group issues by severity
+        issues_by_severity = {
+            "error": [],
+            "warning": [],
+            "info": []
+        }
+        
+        for result in verification_results:
+            if not result.is_supported:
+                issues_by_severity[result.severity].append(result)
+        
+        # Fix errors first (must fix)
+        if issues_by_severity["error"]:
+            research_text = await self._fix_errors(research_text, issues_by_severity["error"])
+        
+        # Fix warnings if they're significant
+        if len(issues_by_severity["warning"]) > 3:  # Threshold for fixing warnings
+            research_text = await self._fix_warnings(research_text, issues_by_severity["warning"])
+        
+        # Info items are optional - only fix if requested
+        
+        return research_text
+    
+    async def _fix_errors(self, text: str, errors: List[VerificationResult]) -> str:
+        """Fix critical errors in the text."""
+        # Sort by location to fix in order
+        errors.sort(key=lambda e: e.claim.location or (0, 0))
+        
+        # Split text for targeted fixes
+        paragraphs = text.split('\n\n')
+        
+        for error in errors:
+            if error.claim.location:
+                p_idx, s_idx = error.claim.location
+                
+                if p_idx < len(paragraphs):
+                    # Fix specific sentence
+                    sentences = re.split(r'(?<=[.!?])\s+', paragraphs[p_idx])
+                    
+                    if s_idx < len(sentences):
+                        # Apply targeted fix
+                        if error.suggested_fix:
+                            if "Add citation" in error.suggested_fix:
+                                # Add [citation needed] marker
+                                sentences[s_idx] = sentences[s_idx].rstrip('.') + " [citation needed]."
+                            elif "cannot be verified" in error.suggested_fix:
+                                # Mark as disputed
+                                sentences[s_idx] = f"[UNVERIFIED: {sentences[s_idx]}]"
+                        
+                        # Reconstruct paragraph
+                        paragraphs[p_idx] = ' '.join(sentences)
+        
+        return '\n\n'.join(paragraphs)
+    
+    async def _fix_warnings(self, text: str, warnings: List[VerificationResult]) -> str:
+        """Fix warning-level issues."""
+        # For warnings, we might add clarifying language or additional sources
+        # This is a simplified implementation
+        
+        for warning in warnings:
+            if "more sources" in warning.suggested_fix:
+                # Add a note about limited sourcing
+                text = text.replace(
+                    warning.claim.text,
+                    f"{warning.claim.text} (Note: Limited sources available for this claim)"
+                )
+        
+        return text
+
+
+class VERIFYSystem:
+    """
+    The complete VERIFY system for efficient, validated research.
+    
+    Focus on:
+    - Single-pass generation with maximum context
+    - Fact verification over format checking  
+    - Targeted fixes over wholesale regeneration
+    - Learning from each research project
+    """
+    
+    def __init__(self, 
+                 lm_model,
+                 retrieval_module,
+                 memory_path: Path = Path("research_memory")):
+        
+        self.lm_model = lm_model
+        self.retrieval_module = retrieval_module
+        
+        # Core components
+        self.fact_checker = FactChecker(retrieval_module)
+        self.memory = ResearchMemory(memory_path)
+        self.fixer = TargetedFixer(lm_model)
+        
+        # Metrics
+        self.total_cost = 0.0
+        self.total_time = 0.0
+        self.api_calls = 0
+    
+    async def generate_research(self, 
+                              topic: str, 
+                              domain: str = "general",
+                              user_requirements: Optional[Dict] = None) -> Dict[str, Any]:
+        """
+        Generate research with single-pass generation and targeted verification.
+        
+        This is the main entry point showing the efficient approach.
+        """
+        start_time = datetime.now()
+        
+        # 1. Get relevant context from memory
+        logger.info(f"Loading learned patterns for domain: {domain}")
+        context = self.memory.get_relevant_context(topic, domain)
+        
+        # 2. Single-pass generation with maximum context
+        logger.info("Generating research in single pass with learned context")
+        research_text = await self._generate_with_context(topic, context, user_requirements)
+        self.api_calls += 1
+        
+        # 3. Retrieve sources for fact checking
+        logger.info("Retrieving sources for verification")
+        sources = await self._retrieve_sources(topic, research_text)
+        
+        # 4. Verify facts and claims
+        logger.info("Verifying claims against sources")
+        verification_results = await self.fact_checker.verify_research(research_text, sources)
+        
+        # 5. Fix only what's broken
+        error_count = sum(1 for r in verification_results if r.severity == "error")
+        if error_count > 0:
+            logger.info(f"Fixing {error_count} verification errors")
+            research_text = await self.fixer.fix_issues(research_text, verification_results)
+            self.api_calls += 1  # Only for fixes
+        
+        # 6. Learn for next time
+        logger.info("Learning patterns from this research")
+        self.memory.learn_from_research(research_text, verification_results, domain)
+        
+        # Calculate metrics
+        end_time = datetime.now()
+        self.total_time = (end_time - start_time).total_seconds()
+        
+        # Prepare results
+        return {
+            "research": research_text,
+            "verification_results": verification_results,
+            "metrics": {
+                "total_time": self.total_time,
+                "api_calls": self.api_calls,
+                "estimated_cost": self.api_calls * 0.03,  # Rough estimate
+                "claims_verified": len(verification_results),
+                "error_rate": error_count / len(verification_results) if verification_results else 0,
+                "sources_used": len(sources)
+            },
+            "domain": domain,
+            "learned_patterns": len(context.get("domain_patterns", []))
+        }
+    
+    async def _generate_with_context(self, 
+                                   topic: str, 
+                                   context: Dict[str, Any],
+                                   user_requirements: Optional[Dict] = None) -> str:
+        """Generate research with learned context."""
+        
+        # Build enhanced prompt with learned patterns
+        prompt = f"""Generate comprehensive research on: {topic}
+
+Based on successful patterns for this domain:
+- Structure: {json.dumps(context.get('successful_structures', [])[:2], indent=2)}
+- Common pitfalls to avoid: {'; '.join(context.get('common_pitfalls', []))}
+- Recommended sources: {', '.join(list(context.get('domain_knowledge', {}).get('common_sources', {}).keys())[:5])}
+
+Requirements:
+{json.dumps(user_requirements or {}, indent=2)}
+
+Generate a well-researched article with proper citations."""
+
+        # In production, this would call the actual LM
+        # For demo, return placeholder
+        return f"""# Research on {topic}
+
+## Introduction
+This research examines {topic} with a focus on recent developments and empirical evidence.
+
+## Key Findings
+Recent studies indicate significant developments in {topic}. According to Smith et al. (2023), 
+the impact has been measured at 45% improvement over baseline approaches [1].
+
+## Analysis
+The data suggests multiple factors contribute to these outcomes. A 2024 meta-analysis 
+by Johnson Research Institute found consistent patterns across 127 studies [2].
+
+## Conclusion
+The evidence supports continued investigation into {topic}, with particular attention 
+to implementation challenges and scalability concerns.
+
+References:
+[1] Smith et al. (2023). "Advances in {topic}". Journal of Research.
+[2] Johnson Research Institute (2024). "Meta-analysis of {topic} Studies"."""
+    
+    async def _retrieve_sources(self, topic: str, research_text: str) -> List[Dict]:
+        """Retrieve sources for fact verification."""
+        if not self.retrieval_module:
+            return []
+        
+        # Extract key terms for search
+        key_terms = self._extract_key_terms(research_text)
+        
+        # Search for sources
+        sources = []
+        for term in key_terms[:5]:  # Limit searches for efficiency
+            try:
+                results = await self.retrieval_module.search(f"{topic} {term}")
+                sources.extend(results)
+            except:
+                pass
+        
+        return sources
+    
+    def _extract_key_terms(self, text: str) -> List[str]:
+        """Extract key terms for source retrieval."""
+        # Simple implementation - in production use NLP
+        # Look for capitalized phrases and quoted terms
+        terms = re.findall(r'"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', text)
+        return [t[0] or t[1] for t in terms if t[0] or t[1]]

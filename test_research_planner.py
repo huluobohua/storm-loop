@@ -83,6 +83,9 @@ def test_multi_agent_module_returns_plan():
     modules_mod = types.ModuleType("dspy.dsp.modules")
     lm_mod = types.ModuleType("dspy.dsp.modules.lm")
 
+    # Mock class to prevent ImportError when dspy is not available
+    # This provides a minimal interface for testing research planner
+    # without requiring the full dspy dependency
     class _Retrieve:
         def __init__(self, *args, **kwargs):
             pass
