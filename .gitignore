@@ -202,3 +202,5 @@ node_modules/
 # Task files
 # tasks.json
 # tasks/ 
+storm_loop_demo_output/
+demo_memory/

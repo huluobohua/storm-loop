@@ -1,5 +1,5 @@
-# storm-loop
-STORM-Academic Hybrid System: AI-assisted research and writing platform combining academic rigor with general knowledge
+# VERIFY Research System
+VERIFY-powered Academic Research Platform: Fact-verified AI research with PRISMA Assistant for systematic literature reviews
 
 ## Installation
 
