@@ -82,7 +82,13 @@ def test_multi_agent_module_returns_plan():
     dsp_mod = types.ModuleType("dspy.dsp")
     modules_mod = types.ModuleType("dspy.dsp.modules")
     lm_mod = types.ModuleType("dspy.dsp.modules.lm")
+
+    class _Retrieve:
+        def __init__(self, *args, **kwargs):
+            pass
+
     dspy_mod.dsp = dsp_mod
+    dspy_mod.Retrieve = _Retrieve
     sys.modules.setdefault("dspy", dspy_mod)
     sys.modules.setdefault("dspy.dsp", dsp_mod)
     sys.modules.setdefault("dspy.dsp.modules", modules_mod)
