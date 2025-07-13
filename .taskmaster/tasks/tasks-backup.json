@@ -8,7 +8,7 @@
         "status": "done",
         "dependencies": [],
         "priority": "high",
-        "details": "Initialize project environment and repository structure.",
+        "details": "1. Create a new Git repository for STORM-Loop.\n2. Set up a Python virtual environment (use Python 3.9+ for compatibility).\n3. Create a requirements.txt file with initial dependencies:\n   - fastapi==0.68.0\n   - uvicorn==0.15.0\n   - redis==4.3.4\n   - requests==2.26.0\n   - aiohttp==3.8.1\n4. Set up a basic project structure:\n   /storm_loop\n     /api\n     /models\n     /services\n     /utils\n   /tests\n   main.py\n   config.py\n5. Create a .gitignore file to exclude virtual environment, cache files, and sensitive information.\n6. Set up pre-commit hooks for code formatting (using black) and linting (using flake8).\n7. Ensure task alignment with GitHub issue #12 in the storm-loop repository.",
         "testStrategy": "1. Verify that the repository is created and accessible.\n2. Ensure the virtual environment can be activated and all dependencies can be installed.\n3. Check that the basic project structure is in place.\n4. Verify that .gitignore is working correctly.\n5. Test pre-commit hooks by making a commit with unformatted code.\n6. Confirm that this task is properly linked to GitHub issue #12.",
         "subtasks": []
       },
@@ -21,7 +21,7 @@
           1
         ],
         "priority": "high",
-        "details": "Core implementation task for implement academic source integration.",
+        "details": "1. Create an AcademicSourceService class in services/academic_source_service.py.\n2. Implement methods for querying OpenAlex API (use requests library):\n   - search_papers(query, limit=10)\n   - get_paper_details(paper_id)\n3. Implement methods for Crossref API:\n   - resolve_doi(doi)\n   - get_publication_metadata(doi)\n4. Create a SourceQualityScorer class:\n   - implement score_source(paper_metadata) method\n   - use factors like citation count, journal impact factor, and recency\n5. Implement error handling and rate limiting for API requests.\n6. Use asyncio and aiohttp for concurrent API requests to improve performance.\n\nGitHub Reference: This task corresponds to GitHub issue #13 in the storm-loop repository and aligns with Phase 1.1 issue #1 for academic source integration.",
         "testStrategy": "1. Write unit tests for each API method using pytest.\n2. Mock API responses using pytest-mock.\n3. Test error handling with invalid inputs and simulated API failures.\n4. Benchmark performance of concurrent vs sequential requests.\n5. Verify source quality scoring with known high and low-quality papers.",
         "subtasks": []
       },
@@ -29,7 +29,7 @@
         "id": 3,
         "title": "Implement Redis Caching Layer",
         "description": "Set up a Redis caching layer to optimize performance and reduce API calls.",
-        "details": "Core implementation task for implement redis caching layer.",
+        "details": "1. Set up a Redis client in services/cache_service.py using redis-py library.\n2. Implement cache_get and cache_set methods with TTL.\n3. Create decorators for caching API responses:\n   - @cache_academic_search\n   - @cache_paper_details\n   - @cache_doi_resolution\n4. Implement cache invalidation strategy for outdated data.\n5. Add configuration options for Redis connection in config.py.\n6. Use connection pooling for efficient Redis connections.\n7. Implement cache warm-up for frequently accessed data.",
         "testStrategy": "1. Write unit tests for caching methods.\n2. Test cache hit and miss scenarios.\n3. Verify TTL functionality.\n4. Benchmark performance improvements with caching.\n5. Test cache invalidation.\n6. Ensure thread-safety in a multi-threaded environment.",
         "priority": "medium",
         "dependencies": [
@@ -48,7 +48,7 @@
           3
         ],
         "priority": "high",
-        "details": "Development task for develop multi-agent research architecture.",
+        "details": "1. Create a base Agent class in models/agent.py.\n2. Implement specialized agent classes:\n   - AcademicResearcherAgent\n   - CriticAgent\n   - CitationVerifierAgent\n   - PlannerAgent\n   - WriterAgent\n3. Develop a hierarchical coordination system:\n   - MetaCoordinator for overall workflow orchestration\n   - PhaseCoordinators for managing specific critic-driven loops\n4. Implement critic-driven loops for each research phase (planning, research, writing).\n5. Create a shared research context system for maintaining state across phases.\n6. Develop quality metrics and termination conditions for critic satisfaction.\n7. Use asyncio for parallel agent processing.\n8. Implement inter-agent communication protocols.\n9. Integrate with STORM's multi-perspective conversation format.",
         "testStrategy": "1. Write unit tests for each agent class.\n2. Test hierarchical coordination with mock agents.\n3. Verify critic-driven loop functionality with simulated research phases.\n4. Test quality metrics and termination conditions.\n5. Verify parallel processing performance.\n6. Ensure proper integration with STORM conversation format.\n7. Validate shared research context persistence across phases.",
         "subtasks": [
           {
@@ -79,7 +79,7 @@
             "dependencies": [
               2
             ],
-            "details": "Implement MetaCoordinator for overall research workflow orchestration. Create PhaseCoordinators for managing specific critic-driven loops (planner\u2194critic, researcher\u2194critic, writer\u2194critic). Use the Strategy pattern for flexible agent behavior selection.",
+            "details": "Implement MetaCoordinator for overall research workflow orchestration. Create PhaseCoordinators for managing specific critic-driven loops (planner↔critic, researcher↔critic, writer↔critic). Use the Strategy pattern for flexible agent behavior selection.",
             "testStrategy": "Develop integration tests simulating hierarchical coordination and phase transitions."
           },
           {
@@ -125,7 +125,7 @@
             "dependencies": [
               6
             ],
-            "details": "Adapt the agent outputs to fit STORM's conversation format. Ensure compatibility with existing STORM components. Implement necessary interfaces for seamless integration between STORM's multi-model architecture and the critic-driven loops.\n<info added on 2025-07-10T22:22:30.060Z>\nINTEGRATION COMPLETE: Successfully implemented the STORM-Loop integration, creating the world's first self-improving research system that combines STORM's multi-model architecture with critic-driven iterative refinement loops.\n\nIMPLEMENTATION DETAILS:\n- Developed STORMLoopRunner as the main orchestration component managing the 5-phase critic-driven pipeline\n- Implemented phase-specific integration across Planning, Research, Outline, Article, and Polish stages\n- Created interfaces for multi-domain evaluation using appropriate critic combinations\n- Built quality-gated progression system ensuring phases only advance upon critic satisfaction\n- Adapted agent outputs to STORM's conversation format while maintaining compatibility with existing components\n\nPERFORMANCE METRICS:\n- Planning Quality: +220% improvement (0.30 \u2192 0.96)\n- Research Quality: +169% improvement (0.35 \u2192 0.94)\n- Writing Quality: +49% improvement (0.65 \u2192 0.97)\n- Citation Quality: +73% improvement (0.55 \u2192 0.95)\n\nTECHNICAL ACHIEVEMENTS:\n- Successfully preserved research context across phases and iterations\n- Implemented comprehensive result tracking with iteration history\n- Created actionable feedback mechanisms driving continuous improvement\n- Ensured seamless integration between STORM's multi-model architecture and critic-driven loops\n\nThe integration delivers research quality exceeding either STORM alone or traditional agentic systems, representing a category-defining breakthrough in AI research automation.\n</info added on 2025-07-10T22:22:30.060Z>",
+            "details": "Adapt the agent outputs to fit STORM's conversation format. Ensure compatibility with existing STORM components. Implement necessary interfaces for seamless integration between STORM's multi-model architecture and the critic-driven loops.\n<info added on 2025-07-10T22:22:30.060Z>\nINTEGRATION COMPLETE: Successfully implemented the STORM-Loop integration, creating the world's first self-improving research system that combines STORM's multi-model architecture with critic-driven iterative refinement loops.\n\nIMPLEMENTATION DETAILS:\n- Developed STORMLoopRunner as the main orchestration component managing the 5-phase critic-driven pipeline\n- Implemented phase-specific integration across Planning, Research, Outline, Article, and Polish stages\n- Created interfaces for multi-domain evaluation using appropriate critic combinations\n- Built quality-gated progression system ensuring phases only advance upon critic satisfaction\n- Adapted agent outputs to STORM's conversation format while maintaining compatibility with existing components\n\nPERFORMANCE METRICS:\n- Planning Quality: +220% improvement (0.30 → 0.96)\n- Research Quality: +169% improvement (0.35 → 0.94)\n- Writing Quality: +49% improvement (0.65 → 0.97)\n- Citation Quality: +73% improvement (0.55 → 0.95)\n\nTECHNICAL ACHIEVEMENTS:\n- Successfully preserved research context across phases and iterations\n- Implemented comprehensive result tracking with iteration history\n- Created actionable feedback mechanisms driving continuous improvement\n- Ensured seamless integration between STORM's multi-model architecture and critic-driven loops\n\nThe integration delivers research quality exceeding either STORM alone or traditional agentic systems, representing a category-defining breakthrough in AI research automation.\n</info added on 2025-07-10T22:22:30.060Z>",
             "testStrategy": "Perform system-level tests to verify the integration with STORM and overall functionality of the multi-agent research architecture."
           }
         ]
@@ -134,7 +134,7 @@
         "id": 5,
         "title": "Enhance StormInformationTable with Academic Metadata",
         "description": "Extend the existing StormInformationTable to include academic-specific metadata.",
-        "details": "1.",
+        "details": "1. Modify the StormInformationTable class in models/information_table.py.\n2. Add new fields:\n   - doi: str\n   - authors: List[str]\n   - publication_year: int\n   - journal: str\n   - citation_count: int\n   - impact_factor: float\n3. Implement methods for adding and retrieving academic metadata.\n4. Create a data migration script for existing data.\n5. Update relevant services to use the new metadata fields.\n6. Implement serialization methods for easy conversion to JSON.\n7. Add validation for new fields (e.g., valid DOI format).",
         "testStrategy": "1. Write unit tests for new methods and fields.\n2. Test data migration on a sample dataset.\n3. Verify backward compatibility with existing STORM functions.\n4. Test serialization and deserialization of academic metadata.\n5. Validate proper storage and retrieval of all new fields.",
         "priority": "medium",
         "dependencies": [
@@ -148,7 +148,7 @@
         "id": 6,
         "title": "Implement Citation Verification System",
         "description": "Develop a real-time citation verification system to validate claims against academic sources.",
-        "details": "Core implementation task for implement citation verification system.",
+        "details": "1. Create a CitationVerifier class in services/citation_service.py.\n2. Implement methods:\n   - verify_citation(claim, source)\n   - check_fact_against_source(fact, source_text)\n3. Integrate with academic source retrieval to fetch full-text when available.\n4. Implement citation quality scoring based on source metrics.\n5. Support multiple citation styles (APA, MLA, Chicago) using the citeproc-py library.\n6. Develop a caching mechanism for verified citations.\n7. Implement fuzzy matching for inexact quotes using the fuzzywuzzy library.",
         "testStrategy": "1. Write unit tests for citation verification methods.\n2. Test with a variety of claims and sources.\n3. Verify citation style formatting accuracy.\n4. Benchmark performance for real-time verification.\n5. Test fuzzy matching with slightly misquoted text.\n6. Verify caching mechanism for repeated verifications.",
         "priority": "high",
         "dependencies": [
@@ -162,7 +162,7 @@
         "id": 7,
         "title": "Develop Quality Assurance Pipeline",
         "description": "Implement a multi-level quality assurance pipeline for academic rigor and writing quality.",
-        "details": "Development task for develop quality assurance pipeline.",
+        "details": "1. Create a QualityAssurancePipeline class in services/quality_assurance.py.\n2. Implement stages:\n   - grammar_check() using the language_tool_python library\n   - style_check() for academic writing style\n   - citation_check() using the CitationVerifier\n   - plagiarism_check() using the copydetect library\n3. Implement configurable quality thresholds in config.py.\n4. Create a QualityReport class to store and present QA results.\n5. Integrate with human feedback system for manual reviews.\n6. Implement parallel processing for QA stages using asyncio.\n7. Add hooks for custom domain-specific checks.",
         "testStrategy": "1. Write unit tests for each QA stage.\n2. Test pipeline with known good and bad quality inputs.\n3. Verify configurable thresholds are respected.\n4. Test integration with human feedback system.\n5. Benchmark performance of parallel vs sequential QA process.\n6. Validate extensibility with a custom domain-specific check.",
         "priority": "high",
         "dependencies": [
@@ -176,7 +176,7 @@
         "id": 8,
         "title": "Implement Advanced Research Planning",
         "description": "Develop AI-driven research planning capabilities for optimizing the research process.",
-        "details": "Core implementation task for implement advanced research planning.",
+        "details": "1. Create a ResearchPlanner class in services/research_planner.py.\n2. Implement methods:\n   - analyze_topic_complexity(topic)\n   - generate_research_strategy(topic, complexity)\n   - optimize_multi_perspective_plan(perspectives)\n3. Use NLP techniques (e.g., TF-IDF, topic modeling) for complexity analysis.\n4. Implement a graph-based approach for research strategy generation.\n5. Use genetic algorithms for multi-perspective plan optimization.\n6. Integrate with academic source retrieval for informed planning.\n7. Implement caching of research plans for similar topics.",
         "testStrategy": "1. Write unit tests for each planning method.\n2. Test complexity analysis with various topics.\n3. Verify research strategy generation produces logical plans.\n4. Test multi-perspective optimization for efficiency.\n5. Benchmark planning performance for complex topics.\n6. Validate caching mechanism for repeated planning requests.",
         "priority": "medium",
         "dependencies": [
@@ -191,7 +191,7 @@
         "id": 9,
         "title": "Develop Collaborative Features",
         "description": "Implement real-time collaboration features and expert integration workflows.",
-        "details": "Development task for develop collaborative features.",
+        "details": "1. Set up a WebSocket server using FastAPI and websockets.\n2. Implement a CollaborationService in services/collaboration_service.py.\n3. Create real-time editing features using operational transformation.\n4. Implement user presence and cursor tracking.\n5. Develop a version control system for collaborative edits.\n6. Create an ExpertReviewWorkflow class for managing expert feedback.\n7. Implement comment threading and resolution features.\n8. Use Redis pub/sub for real-time updates across clients.\n9. Implement conflict resolution strategies for simultaneous edits.",
         "testStrategy": "1. Write unit tests for collaboration features.\n2. Test real-time editing with multiple simulated users.\n3. Verify version control for edit history.\n4. Test expert review workflow end-to-end.\n5. Benchmark WebSocket performance under load.\n6. Validate conflict resolution in various scenarios.",
         "priority": "medium",
         "dependencies": [
@@ -205,7 +205,7 @@
         "id": 10,
         "title": "Implement Enhanced STORM Engine",
         "description": "Extend the core STORM engine with academic enhancements and multi-agent capabilities.",
-        "details": "Core implementation task for implement enhanced storm engine.",
+        "details": "1. Refactor the existing STORM engine to accommodate new features.\n2. Integrate the multi-agent research architecture.\n3. Implement academic source prioritization in the retrieval process.\n4. Enhance the question-asking process with academic context awareness.\n5. Integrate the quality assurance pipeline into the synthesis process.\n6. Implement dynamic agent selection based on topic and task.\n7. Optimize the engine for parallel processing of research tasks.\n8. Implement a plugin system for easy extension of engine capabilities.",
         "testStrategy": "1. Write comprehensive unit tests for the enhanced engine.\n2. Perform integration tests with all new components.\n3. Benchmark performance against the original STORM engine.\n4. Test with a variety of academic and general knowledge topics.\n5. Verify proper integration of all academic enhancements.\n6. Validate the plugin system with a sample extension.",
         "priority": "high",
         "dependencies": [
@@ -222,7 +222,7 @@
         "id": 11,
         "title": "Develop User Interface for STORM-Loop",
         "description": "Create a user-friendly interface for interacting with the STORM-Loop system.",
-        "details": "Development task for develop user interface for storm-loop.",
+        "details": "1. Design a responsive web interface using React (v17.0.2) and Material-UI (v5.0.0).\n2. Implement key pages:\n   - Research initiation form\n   - Multi-agent research progress dashboard\n   - Article generation and editing interface\n   - Collaboration and review workspace\n3. Create visualizations for source quality and research progress.\n4. Implement real-time updates using WebSocket connections.\n5. Develop an intuitive citation management interface.\n6. Create configuration options for academic vs Wikipedia modes.\n7. Implement accessibility features (WCAG 2.1 compliance).\n8. Optimize for mobile devices using responsive design principles.",
         "testStrategy": "1. Conduct usability testing with potential users.\n2. Perform cross-browser compatibility tests.\n3. Verify real-time update functionality.\n4. Test responsiveness on various device sizes.\n5. Conduct accessibility audits using automated tools.\n6. Perform end-to-end testing of key user flows.",
         "priority": "medium",
         "dependencies": [
@@ -236,7 +236,7 @@
         "id": 12,
         "title": "Implement API Layer",
         "description": "Develop a comprehensive API layer for STORM-Loop functionality.",
-        "details": "Core implementation task for implement api layer.",
+        "details": "1. Use FastAPI (v0.68.0) to create a RESTful API.\n2. Implement endpoints for:\n   - Research initiation\n   - Progress tracking\n   - Article generation and retrieval\n   - Collaboration features\n   - Configuration management\n3. Implement JWT authentication for secure access.\n4. Use Pydantic for request/response modeling and validation.\n5. Implement rate limiting using the fastapi-limiter library.\n6. Create comprehensive API documentation using Swagger UI.\n7. Implement versioning for API endpoints.\n8. Use dependency injection for easier testing and maintenance.",
         "testStrategy": "1. Write unit tests for each API endpoint.\n2. Perform integration tests with the STORM-Loop engine.\n3. Test authentication and authorization scenarios.\n4. Verify rate limiting functionality.\n5. Validate API documentation accuracy.\n6. Conduct load testing to ensure performance under high concurrency.",
         "priority": "high",
         "dependencies": [
@@ -249,7 +249,7 @@
         "id": 13,
         "title": "Implement Data Persistence Layer",
         "description": "Develop a robust data persistence layer for STORM-Loop.",
-        "details": "Core implementation task for implement data persistence layer.",
+        "details": "1. Use PostgreSQL (v13) as the primary database.\n2. Implement SQLAlchemy (v1.4) as the ORM layer.\n3. Design database schemas for:\n   - User data\n   - Research projects\n   - Academic sources and metadata\n   - Collaboration data\n4. Implement database migrations using Alembic.\n5. Create data access objects (DAOs) for each major entity.\n6. Implement connection pooling for efficient database usage.\n7. Set up database indexing for performance optimization.\n8. Implement data archiving and cleanup strategies.\n9. Use pgcrypto for encrypting sensitive data at rest.",
         "testStrategy": "1. Write unit tests for all DAO methods.\n2. Test database migrations and rollbacks.\n3. Perform CRUD operation tests for each entity.\n4. Benchmark query performance and optimize as needed.\n5. Test data integrity constraints.\n6. Verify proper encryption of sensitive data.\n7. Conduct load testing to ensure database scalability.",
         "priority": "high",
         "dependencies": [
@@ -263,7 +263,7 @@
         "id": 14,
         "title": "Implement Logging and Monitoring",
         "description": "Set up comprehensive logging and monitoring for STORM-Loop.",
-        "details": "Core implementation task for implement logging and monitoring.",
+        "details": "1. Use the logging module for application logging.\n2. Implement structured logging using JSON format.\n3. Set up centralized log management using ELK stack (Elasticsearch, Logstash, Kibana).\n4. Implement application performance monitoring using Prometheus and Grafana.\n5. Create custom dashboards for key metrics:\n   - API response times\n   - Database query performance\n   - Error rates and types\n   - User activity and system usage\n6. Set up alerting for critical issues using Alertmanager.\n7. Implement distributed tracing using Jaeger for request flow analysis.\n8. Create a health check endpoint for system status monitoring.",
         "testStrategy": "1. Verify log output format and content.\n2. Test log aggregation in ELK stack.\n3. Validate custom dashboard accuracy.\n4. Test alerting system with simulated issues.\n5. Verify distributed tracing across components.\n6. Test health check endpoint under various conditions.\n7. Conduct a mock incident response using the monitoring tools.",
         "priority": "medium",
         "dependencies": [
@@ -277,7 +277,7 @@
         "id": 15,
         "title": "System Integration and Testing",
         "description": "Integrate all components and perform comprehensive system testing.",
-        "details": "Testing and validation for system integration and testing.",
+        "details": "1. Develop an integration test suite using pytest.\n2. Create test scenarios covering end-to-end workflows:\n   - Research initiation to article generation\n   - Collaborative editing and expert review\n   - Multi-agent research process\n3. Implement automated UI testing using Selenium WebDriver.\n4. Conduct performance testing using Locust:\n   - Simulate concurrent users\n   - Test system under various load conditions\n5. Perform security testing:\n   - Conduct vulnerability scans using OWASP ZAP\n   - Perform penetration testing\n6. Test system resilience:\n   - Simulate component failures\n   - Verify graceful degradation\n7. Conduct user acceptance testing with a group of beta testers.\n8. Perform cross-browser and cross-device testing.",
         "testStrategy": "1. Execute the full integration test suite.\n2. Analyze and optimize performance bottlenecks.\n3. Address all security vulnerabilities found.\n4. Collect and analyze feedback from beta testers.\n5. Verify system stability under stress conditions.\n6. Ensure all acceptance criteria are met.\n7. Document any remaining issues or limitations.",
         "priority": "high",
         "dependencies": [
@@ -482,7 +482,7 @@
         "id": 18,
         "title": "Create Documentation and Training Materials",
         "description": "Develop comprehensive user and technical documentation for the PRISMA Assistant 80/20 system.",
-        "details": "Use Sphinx for documentation generation.",
+        "details": "Use Sphinx for documentation generation. Create a user guide with a 5-minute quick start section. Develop an interactive tutorial using Jupyter notebooks with sample datasets. Record and edit 3 training videos (90 minutes total) using tools like OBS Studio and DaVinci Resolve. Generate technical API documentation using docstrings and autodoc. Write case studies based on real systematic reviews. Set up a GitHub Pages site for hosting documentation. Use Markdown for easy maintenance and version control.",
         "testStrategy": "Review all documentation for accuracy and completeness. Conduct user testing of the quick start guide and interactive tutorial. Gather feedback on training videos from test users. Verify API documentation against actual code. Test GitHub Pages deployment and accessibility.",
         "priority": "high",
         "dependencies": [

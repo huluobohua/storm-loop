@@ -7,7 +7,7 @@ from unittest.mock import Mock, AsyncMock, patch
 from pathlib import Path
 import tempfile
 
-from knowledge_storm.verify_system import (
+from knowledge_storm.verify import (
     VERIFYSystem,
     FactChecker, 
     ResearchMemory,
