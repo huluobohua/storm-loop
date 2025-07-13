@@ -199,8 +199,10 @@ node_modules/
 *.sw?
 # OS specific
 
-# Task files
-# tasks.json
-# tasks/ 
+# Task files - Task Master files should be version controlled
 storm_loop_demo_output/
 demo_memory/
+
+# Backup files
+*.bak
+*backup*

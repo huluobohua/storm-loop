@@ -15,6 +15,39 @@ from .models import Paper, SearchStrategy, ScreeningResult
 logger = logging.getLogger(__name__)
 
 
+# Scoring weights and thresholds as named constants
+class ScoringWeights:
+    """Scoring weights for different components of inclusion score."""
+    PICO_ALIGNMENT = 0.35
+    STUDY_TYPE = 0.30
+    METHODOLOGY = 0.25
+    VENUE_QUALITY = 0.05
+    RECENCY = 0.03
+    CITATIONS = 0.02
+
+class ConfidenceThresholds:
+    """Confidence thresholds for decision making."""
+    AUTO_INCLUDE = 0.8
+    AUTO_EXCLUDE = 0.8
+    HIGH_CONFIDENCE_EXCLUSION = 0.92
+    MODERATE_CONFIDENCE = 0.6
+    
+class BoostFactors:
+    """Multipliers for confidence boosting."""
+    STRONG_SIGNALS_4_PLUS = 1.4
+    STRONG_SIGNALS_3_PLUS = 1.25
+    WEAK_SIGNALS_4_PLUS = 1.15
+    HIGH_PICO_ALIGNMENT = 1.15
+    STRONG_METHODOLOGY = 1.1
+
+class QualityThresholds:
+    """Quality thresholds for signals."""
+    STRONG_SIGNAL = 0.1
+    WEAK_SIGNAL = 0.05
+    HIGH_PICO = 0.2
+    STRONG_METHODOLOGY = 0.15
+
+
 class ScreeningAssistant:
     """
     Targets 80/20 rule: Identify 80% of relevant sources, exclude 80% of irrelevant ones,
@@ -89,8 +122,8 @@ class ScreeningAssistant:
         
         # Track for 80/20 metrics
         total_papers = len(papers)
-        confidence_threshold_include = 0.8  # 80% confidence for auto-include
-        confidence_threshold_exclude = 0.8  # 80% confidence for auto-exclude
+        confidence_threshold_include = ConfidenceThresholds.AUTO_INCLUDE
+        confidence_threshold_exclude = ConfidenceThresholds.AUTO_EXCLUDE
         
         for paper in papers:
             decision, reason, confidence = self._screen_single_paper(paper, criteria)
@@ -161,18 +194,18 @@ class ScreeningAssistant:
                     elif reason == 'wrong_study_type' and any(term in text for term in ['systematic', 'meta-analysis', 'review']):
                         exclusion_confidence = 0.70  # Might reference these in abstract
                     
-                    if exclusion_confidence >= 0.8:
+                    if exclusion_confidence >= ConfidenceThresholds.AUTO_EXCLUDE:
                         return 'exclude', exclusion_reason, exclusion_confidence
         
         # Calculate sophisticated inclusion score
         inclusion_confidence = self._calculate_advanced_inclusion_score(paper, criteria)
         
         # Determine decision based on confidence levels
-        if inclusion_confidence >= 0.8:
+        if inclusion_confidence >= ConfidenceThresholds.AUTO_INCLUDE:
             return 'include', 'high_relevance', inclusion_confidence
-        elif exclusion_confidence >= 0.6:
+        elif exclusion_confidence >= ConfidenceThresholds.MODERATE_CONFIDENCE:
             return 'exclude', exclusion_reason or 'low_relevance', exclusion_confidence
-        elif inclusion_confidence >= 0.6:
+        elif inclusion_confidence >= ConfidenceThresholds.MODERATE_CONFIDENCE:
             return 'maybe', 'moderate_relevance', inclusion_confidence
         else:
             # Low confidence - needs human review
@@ -191,9 +224,28 @@ class ScreeningAssistant:
         text = f"{paper.title} {paper.abstract}".lower()
         scores = {}
         
-        # 1. PICO alignment (30% weight)
+        # Calculate individual scoring components
+        scores['pico'] = self._calculate_pico_alignment_score(text, criteria)
+        scores['study_type'] = self._calculate_study_type_score(text)
+        scores['methodology'] = self._calculate_methodology_score(text)
+        scores['venue'] = self._calculate_venue_quality_score(paper)
+        scores['recency'] = self._calculate_recency_score(paper)
+        scores['citations'] = self._calculate_citation_score(text, paper)
+        
+        # Calculate base score
+        total_score = sum(scores.values())
+        
+        # Apply confidence boosting based on signal strength
+        boosted_score = self._apply_confidence_boosting(total_score, scores)
+        
+        # Ensure score is between 0 and 1
+        return min(max(boosted_score, 0.0), 1.0)
+    
+    def _calculate_pico_alignment_score(self, text: str, criteria: SearchStrategy) -> float:
+        """Calculate PICO alignment score component."""
         pico_matches = 0
         pico_total = 0
+        
         for element, terms in criteria.pico_elements.items():
             if terms:
                 pico_total += len(terms)
@@ -204,17 +256,20 @@ class ScreeningAssistant:
                     elif any(word in text for word in term.lower().split()):
                         pico_matches += 0.5  # Partial credit for partial matches
         
-        scores['pico'] = (pico_matches / pico_total * 0.35) if pico_total > 0 else 0
-        
-        # 2. Study type indicators (30% weight)
+        return (pico_matches / pico_total * ScoringWeights.PICO_ALIGNMENT) if pico_total > 0 else 0
+    
+    def _calculate_study_type_score(self, text: str) -> float:
+        """Calculate study type indicators score component."""
         study_type_score = 0
         for indicator_type, patterns in self.inclusion_indicators.items():
             matches = sum(1 for pattern in patterns if re.search(pattern, text, re.I))
             if matches > 0:
                 study_type_score = max(study_type_score, matches / len(patterns))
-        scores['study_type'] = study_type_score * 0.30
-        
-        # 3. Methodological rigor (20% weight)
+        return study_type_score * ScoringWeights.STUDY_TYPE
+    
+    def _calculate_methodology_score(self, text: str) -> float:
+        """Calculate methodological rigor score component."""
+        # Methodology indicators with individual weights
         method_indicators = [
             (r'\b(sample size|n\s*=\s*\d+)\b', 0.15),
             (r'\b(statistical|significance|p\s*[<=]\s*0\.\d+)\b', 0.15),
@@ -228,9 +283,10 @@ class ScreeningAssistant:
         
         method_score = sum(weight for pattern, weight in method_indicators 
                           if re.search(pattern, text, re.I))
-        scores['methodology'] = min(method_score, 1.0) * 0.25
-        
-        # 4. Journal/venue quality (5% weight)
+        return min(method_score, 1.0) * ScoringWeights.METHODOLOGY
+    
+    def _calculate_venue_quality_score(self, paper: Paper) -> float:
+        """Calculate journal/venue quality score component."""
         venue_score = 0
         if paper.journal:
             journal_lower = paper.journal.lower()
@@ -240,9 +296,10 @@ class ScreeningAssistant:
                 venue_score = 0.8
             elif 'journal' in journal_lower:
                 venue_score = 0.6
-        scores['venue'] = venue_score * 0.05
-        
-        # 5. Recency (3% weight)
+        return venue_score * ScoringWeights.VENUE_QUALITY
+    
+    def _calculate_recency_score(self, paper: Paper) -> float:
+        """Calculate publication recency score component."""
         recency_score = 0
         if paper.year:
             current_year = datetime.now().year
@@ -252,41 +309,40 @@ class ScreeningAssistant:
                 recency_score = 0.8
             elif paper.year >= current_year - 10:
                 recency_score = 0.5
-        scores['recency'] = recency_score * 0.03
-        
-        # 6. Citation indicators (2% weight)
+        return recency_score * ScoringWeights.RECENCY
+    
+    def _calculate_citation_score(self, text: str, paper: Paper) -> float:
+        """Calculate citation indicators score component."""
         citation_score = 0
         if paper.doi or '[' in text or 'reference' in text:
             citation_score = 0.5
         if re.search(r'\b\d{4}\b.*\b\d{4}\b.*\b\d{4}\b', text):  # Multiple years cited
             citation_score = 1.0
-        scores['citations'] = citation_score * 0.02
-        
-        # Calculate total score with confidence adjustment
-        total_score = sum(scores.values())
-        
-        # Boost confidence if multiple strong signals present
-        strong_signals = sum(1 for s in scores.values() if s > 0.1)
-        weak_signals = sum(1 for s in scores.values() if s > 0.05)
+        return citation_score * ScoringWeights.CITATIONS
+    
+    def _apply_confidence_boosting(self, base_score: float, scores: Dict[str, float]) -> float:
+        """Apply confidence boosting based on signal strength."""
+        # Count strong and weak signals
+        strong_signals = sum(1 for s in scores.values() if s > QualityThresholds.STRONG_SIGNAL)
+        weak_signals = sum(1 for s in scores.values() if s > QualityThresholds.WEAK_SIGNAL)
         
         # Progressive confidence boosting
         if strong_signals >= 4:
-            total_score = min(total_score * 1.4, 1.0)  # 40% boost
+            base_score = min(base_score * BoostFactors.STRONG_SIGNALS_4_PLUS, 1.0)
         elif strong_signals >= 3:
-            total_score = min(total_score * 1.25, 1.0)  # 25% boost
+            base_score = min(base_score * BoostFactors.STRONG_SIGNALS_3_PLUS, 1.0)
         elif weak_signals >= 4:
-            total_score = min(total_score * 1.15, 1.0)  # 15% boost
+            base_score = min(base_score * BoostFactors.WEAK_SIGNALS_4_PLUS, 1.0)
         
         # Additional boost for high PICO alignment
-        if scores.get('pico', 0) > 0.2:
-            total_score = min(total_score * 1.15, 1.0)
+        if scores.get('pico', 0) > QualityThresholds.HIGH_PICO:
+            base_score = min(base_score * BoostFactors.HIGH_PICO_ALIGNMENT, 1.0)
             
         # Boost for strong methodology signals
-        if scores.get('methodology', 0) > 0.15:
-            total_score = min(total_score * 1.1, 1.0)
+        if scores.get('methodology', 0) > QualityThresholds.STRONG_METHODOLOGY:
+            base_score = min(base_score * BoostFactors.STRONG_METHODOLOGY, 1.0)
         
-        # Ensure score is between 0 and 1
-        return min(max(total_score, 0.0), 1.0)
+        return base_score
 
 
 class PRISMAScreener:
