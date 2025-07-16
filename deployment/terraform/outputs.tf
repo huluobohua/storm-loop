@@ -1,4 +1,5 @@
-# EKS Cluster outputs
+# Terraform outputs for STORM infrastructure
+
 output "eks_cluster_endpoint" {
   description = "EKS cluster endpoint"
   value       = module.eks.cluster_endpoint
@@ -79,6 +80,22 @@ output "s3_bucket_arn" {
   value       = aws_s3_bucket.storage.arn
 }
 
+output "alb_logs_bucket_name" {
+  description = "ALB logs S3 bucket name"
+  value       = aws_s3_bucket.alb_logs.id
+}
+
+output "alb_logs_bucket_arn" {
+  description = "ALB logs S3 bucket ARN"
+  value       = aws_s3_bucket.alb_logs.arn
+}
+
+# WAF outputs
+output "waf_web_acl_arn" {
+  description = "WAF Web ACL ARN"
+  value       = aws_wafv2_web_acl.main.arn
+}
+
 # VPC outputs
 output "vpc_id" {
   description = "VPC ID"
@@ -98,12 +115,6 @@ output "public_subnet_ids" {
 output "database_subnet_ids" {
   description = "Database subnet IDs"
   value       = module.vpc.database_subnets
-}
-
-# WAF outputs
-output "waf_web_acl_arn" {
-  description = "WAF Web ACL ARN"
-  value       = aws_wafv2_web_acl.main.arn
 }
 
 # Secrets Manager outputs

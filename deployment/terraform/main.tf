@@ -7,7 +7,7 @@ provider "aws" {
   default_tags {
     tags = {
       Environment = var.environment
-      Project     = "storm-academic"
+      Project     = var.project_name
       ManagedBy   = "terraform"
     }
   }
@@ -141,10 +141,9 @@ module "eks" {
     {
       rolearn  = aws_iam_role.eks_admin.arn
       username = "admin:{{SessionName}}"
-      groups   = ["system:masters"]
+      groups   = ["storm:cluster-operators"]
     }
   ]
-  
 }
 
 # RDS PostgreSQL
@@ -163,7 +162,7 @@ module "rds" {
   db_name  = "storm"
   username = "storm"
   manage_master_user_password = true
-  master_user_secret_kms_key_id = aws_kms_key.rds.arn
+  master_user_secret_kms_key_id = aws_kms_key.main.key_id
   port     = "5432"
   
   vpc_security_group_ids = [aws_security_group.rds.id]
@@ -192,7 +191,6 @@ module "rds" {
       value = "1000"  # Log queries taking more than 1 second
     }
   ]
-  
 }
 
 # ElastiCache Redis
@@ -213,19 +211,17 @@ module "redis" {
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
   auth_token_enabled = true
-  auth_token = random_password.redis_auth.result
+  auth_token = random_password.redis_password.result
   
   automatic_failover_enabled = var.redis_num_nodes > 1
   
   snapshot_retention_limit = 5
   snapshot_window = "03:00-05:00"
-  
 }
 
 # S3 Buckets
 resource "aws_s3_bucket" "storage" {
   bucket = "${var.project_name}-${var.environment}-storage"
-  
 }
 
 resource "aws_s3_bucket_versioning" "storage" {
@@ -268,9 +264,9 @@ resource "aws_lb" "main" {
   
   access_logs {
     bucket  = aws_s3_bucket.alb_logs.bucket
+    prefix  = "alb-logs"
     enabled = true
   }
-  
 }
 
 # WAF
@@ -331,7 +327,6 @@ resource "aws_wafv2_web_acl" "main" {
     metric_name               = "WAF"
     sampled_requests_enabled   = true
   }
-  
 }
 
 resource "aws_wafv2_web_acl_association" "main" {
@@ -343,13 +338,11 @@ resource "aws_wafv2_web_acl_association" "main" {
 resource "aws_cloudwatch_log_group" "app_logs" {
   name              = "/aws/eks/${var.cluster_name}/app"
   retention_in_days = var.log_retention_days
-  
 }
 
 # Secrets Manager
 resource "aws_secretsmanager_secret" "api_keys" {
   name = "${var.project_name}-${var.environment}-api-keys"
-  
 }
 
 resource "aws_secretsmanager_secret_version" "api_keys" {
@@ -363,27 +356,12 @@ resource "aws_secretsmanager_secret_version" "api_keys" {
   })
 }
 
-# Outputs
-output "eks_cluster_endpoint" {
-  value = module.eks.cluster_endpoint
+# Redis auth token secret
+resource "aws_secretsmanager_secret" "redis_auth" {
+  name = "${var.project_name}-${var.environment}-redis-auth"
 }
 
-output "eks_cluster_name" {
-  value = module.eks.cluster_name
-}
-
-output "rds_endpoint" {
-  value = module.rds.db_instance_endpoint
-}
-
-output "redis_endpoint" {
-  value = module.redis.cluster_cache_nodes[0].address
-}
-
-output "alb_dns_name" {
-  value = aws_lb.main.dns_name
-}
-
-output "s3_bucket_name" {
-  value = aws_s3_bucket.storage.id
+resource "aws_secretsmanager_secret_version" "redis_auth" {
+  secret_id     = aws_secretsmanager_secret.redis_auth.id
+  secret_string = random_password.redis_password.result
 }
