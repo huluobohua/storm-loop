@@ -22,7 +22,7 @@ setup(
     description="STORM: A language model-powered knowledge curation engine.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/stanford-oval/storm",
+    url="https://github.com/huluobohua/storm-loop",
     license="MIT License",
     packages=find_packages(),
     classifiers=[

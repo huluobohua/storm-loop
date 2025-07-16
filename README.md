@@ -1,14 +1,36 @@
-# VERIFY Research System
+# STORM-Academic Hybrid System
 
-VERIFY-powered Academic Research Platform: Fact-verified AI research with integrated PRISMA Assistant for systematic literature reviews.
+An AI-assisted research and writing platform that enhances the original STORM (Synthesis of Topic Outline through Retrieval and Multi-perspective question asking) with academic rigor and verification capabilities.
 
-## Key Features
+## 🎯 System Overview
+
+**Primary System**: Enhanced STORM engine with academic research capabilities  
+**Core Enhancement**: Citation verification and quality assurance for academic rigor  
+**Architecture**: Multi-agent system with specialized academic research workflow
+
+### Key Features
 
 - **Single-Pass Research Generation**: Streamlined multi-agent workflow for efficient research
 - **Real-Time Fact Verification**: Claims are verified against authoritative sources during generation
 - **Targeted Fixes**: Only unsupported claims are corrected, preserving accurate content
 - **PRISMA Integration**: 80% automation at 80% confidence for systematic literature reviews
 - **Memory Learning**: System learns from successful research patterns for improved accuracy
+
+### Key Components
+
+- **Enhanced STORM Engine** - Academic workflow selector and hybrid processing
+- **Citation Verification** - Real-time academic source validation
+- **Multi-Agent Architecture** - Specialized agents for research, criticism, and verification
+- **Academic Workflow** - Comprehensive research pipeline with quality gates
+
+## 🏗️ Architecture Clarification
+
+This system combines:
+1. **STORM Framework** - Original topic outline and article generation
+2. **Academic Enhancements** - Research verification and quality assurance
+3. **Verification Services** - Citation and claim validation
+
+The system focuses on enhancing STORM with academic verification capabilities.
 
 ## Installation
 
@@ -52,4 +74,4 @@ The system uses a streamlined three-agent workflow:
 2. **Academic Researcher**: Conducts comprehensive research
 3. **Citation Verifier**: Fact-checks claims and provides targeted corrections
 
-This replaces the previous storm-loop approach with a more efficient verify-based system focused on accuracy and automation.
+This approach enhances the original STORM framework with verification capabilities for improved accuracy and academic rigor.
