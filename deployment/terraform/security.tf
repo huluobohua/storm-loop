@@ -292,3 +292,86 @@ resource "random_password" "redis_password" {
   length  = 32
   special = false  # Redis doesn't like special characters in auth tokens
 }
+
+# Kubernetes RBAC for storm:cluster-operators group
+resource "kubernetes_cluster_role" "cluster_operators" {
+  depends_on = [module.eks]
+  
+  metadata {
+    name = "storm:cluster-operators"
+  }
+  
+  rule {
+    api_groups = [""]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+  
+  rule {
+    api_groups = ["apps"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+  
+  rule {
+    api_groups = ["extensions"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+  
+  rule {
+    api_groups = ["batch"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+  
+  rule {
+    api_groups = ["networking.k8s.io"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+  
+  rule {
+    api_groups = ["rbac.authorization.k8s.io"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+  
+  rule {
+    api_groups = ["storage.k8s.io"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+  
+  rule {
+    api_groups = ["monitoring.coreos.com"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+  
+  rule {
+    api_groups = ["external-secrets.io"]
+    resources  = ["*"]
+    verbs      = ["*"]
+  }
+}
+
+resource "kubernetes_cluster_role_binding" "cluster_operators" {
+  depends_on = [module.eks]
+  
+  metadata {
+    name = "storm:cluster-operators"
+  }
+  
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.cluster_operators.metadata[0].name
+  }
+  
+  subject {
+    kind      = "Group"
+    name      = "storm:cluster-operators"
+    api_group = "rbac.authorization.k8s.io"
+  }
+}

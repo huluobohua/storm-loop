@@ -80,6 +80,16 @@ output "s3_bucket_arn" {
   value       = aws_s3_bucket.storage.arn
 }
 
+output "alb_logs_bucket_name" {
+  description = "ALB logs S3 bucket name"
+  value       = aws_s3_bucket.alb_logs.id
+}
+
+output "alb_logs_bucket_arn" {
+  description = "ALB logs S3 bucket ARN"
+  value       = aws_s3_bucket.alb_logs.arn
+}
+
 # WAF outputs
 output "waf_web_acl_arn" {
   description = "WAF Web ACL ARN"

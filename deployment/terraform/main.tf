@@ -141,7 +141,7 @@ module "eks" {
     {
       rolearn  = aws_iam_role.eks_admin.arn
       username = "admin:{{SessionName}}"
-      groups   = ["system:masters"]
+      groups   = ["storm:cluster-operators"]
     }
   ]
 }
@@ -261,6 +261,12 @@ resource "aws_lb" "main" {
   
   enable_deletion_protection = var.environment == "production"
   enable_http2 = true
+  
+  access_logs {
+    bucket  = aws_s3_bucket.alb_logs.bucket
+    prefix  = "alb-logs"
+    enabled = true
+  }
 }
 
 # WAF
