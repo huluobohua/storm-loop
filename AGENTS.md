@@ -16,6 +16,7 @@ task-master next                                   # Get next available task to 
 task-master show <id>                             # View detailed task information (e.g., task-master show 1.2)
 task-master set-status --id=<id> --status=done    # Mark task complete
 
+
 # Task Management
 task-master add-task --prompt="description" --research        # Add new task with AI assistance
 task-master expand --id=<id> --research --force              # Break task into subtasks
