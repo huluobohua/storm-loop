@@ -1,0 +1,38 @@
+{
+  "patterns": {
+    "healthcare": [
+      {
+        "pattern_type": "structure",
+        "success_metric": 0.65,
+        "pattern_data": {
+          "section_count": 1,
+          "avg_section_length": 4.0,
+          "has_introduction": false,
+          "has_conclusion": false,
+          "citation_density": 0.0
+        },
+        "usage_count": 0,
+        "last_used": "2025-07-10T18:39:01.740367"
+      },
+      {
+        "pattern_type": "source_quality",
+        "success_metric": 0,
+        "pattern_data": {
+          "source_diversity": 0,
+          "primary_source_type": "none",
+          "avg_sources_per_claim": 0
+        },
+        "usage_count": 0,
+        "last_used": "2025-07-10T18:39:01.740376"
+      }
+    ]
+  },
+  "domain_knowledge": {
+    "healthcare": {
+      "common_sources": {},
+      "terminology": [],
+      "fact_patterns": []
+    }
+  },
+  "successful_structures": []
+}
