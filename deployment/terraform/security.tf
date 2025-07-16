@@ -294,6 +294,7 @@ resource "random_password" "redis_password" {
 }
 
 # Kubernetes RBAC for storm:cluster-operators group
+# Follows least-privilege principle with specific permissions for operational tasks
 resource "kubernetes_cluster_role" "cluster_operators" {
   depends_on = [module.eks]
   
@@ -301,58 +302,81 @@ resource "kubernetes_cluster_role" "cluster_operators" {
     name = "storm:cluster-operators"
   }
   
+  # Core resources - pods, services, nodes, namespaces, configmaps, secrets
   rule {
     api_groups = [""]
-    resources  = ["*"]
-    verbs      = ["*"]
+    resources  = ["pods", "pods/log", "pods/status", "services", "nodes", "namespaces", "configmaps", "secrets", "endpoints", "persistentvolumes", "persistentvolumeclaims"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
   
+  # Application workloads
   rule {
     api_groups = ["apps"]
-    resources  = ["*"]
-    verbs      = ["*"]
+    resources  = ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
   
-  rule {
-    api_groups = ["extensions"]
-    resources  = ["*"]
-    verbs      = ["*"]
-  }
-  
+  # Batch jobs
   rule {
     api_groups = ["batch"]
-    resources  = ["*"]
-    verbs      = ["*"]
+    resources  = ["jobs", "cronjobs"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
   
+  # Networking
   rule {
     api_groups = ["networking.k8s.io"]
-    resources  = ["*"]
-    verbs      = ["*"]
+    resources  = ["networkpolicies", "ingresses"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
   
-  rule {
-    api_groups = ["rbac.authorization.k8s.io"]
-    resources  = ["*"]
-    verbs      = ["*"]
-  }
-  
+  # Storage
   rule {
     api_groups = ["storage.k8s.io"]
-    resources  = ["*"]
-    verbs      = ["*"]
+    resources  = ["storageclasses", "volumeattachments"]
+    verbs      = ["get", "list", "watch"]
   }
   
+  # Autoscaling
   rule {
-    api_groups = ["monitoring.coreos.com"]
-    resources  = ["*"]
-    verbs      = ["*"]
+    api_groups = ["autoscaling"]
+    resources  = ["horizontalpodautoscalers"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
   
+  # Metrics
+  rule {
+    api_groups = ["metrics.k8s.io"]
+    resources  = ["pods", "nodes"]
+    verbs      = ["get", "list"]
+  }
+  
+  # External Secrets Operator (if used)
   rule {
     api_groups = ["external-secrets.io"]
-    resources  = ["*"]
-    verbs      = ["*"]
+    resources  = ["secretstores", "externalsecrets"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+  
+  # Monitoring (Prometheus/Grafana)
+  rule {
+    api_groups = ["monitoring.coreos.com"]
+    resources  = ["servicemonitors", "prometheusrules"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+  
+  # Limited RBAC permissions - only for service accounts and role bindings
+  rule {
+    api_groups = ["rbac.authorization.k8s.io"]
+    resources  = ["rolebindings", "roles"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+  
+  # Read-only cluster-level RBAC
+  rule {
+    api_groups = ["rbac.authorization.k8s.io"]
+    resources  = ["clusterroles", "clusterrolebindings"]
+    verbs      = ["get", "list", "watch"]
   }
 }
 
