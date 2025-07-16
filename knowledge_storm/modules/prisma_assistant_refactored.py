@@ -1,10 +1,16 @@
 """
-PRISMAAssistant: Main coordinator for systematic review assistance.
+VERIFY-PRISMA Integration: Systematic Review Automation Module.
 
-Refactored main coordinator that orchestrates the focused PRISMA modules
-for systematic review automation following the 80/20 methodology.
+This module is part of the STORM-Academic VERIFY system, providing automated
+systematic review capabilities following PRISMA guidelines and the 80/20 methodology.
 
-Integrated with STORM-Academic VERIFY system for enhanced academic validation.
+The VERIFY system's PRISMA functionality orchestrates focused modules for:
+- Search strategy development
+- Paper screening automation  
+- Data extraction standardization
+- Zero draft generation
+
+This is NOT a separate "PRISMA Assistant" - it's integrated VERIFY functionality.
 """
 
 import logging
@@ -18,34 +24,35 @@ from .prisma.extraction import DataExtractionHelper
 from .prisma.draft_generation import ZeroDraftGenerator
 
 # Integration with existing STORM-Academic VERIFY system
-# NOTE: Imports temporarily disabled due to langchain dependency conflicts
-# Will be re-enabled once dependency issues are resolved
 try:
     from ..services.citation_verifier import CitationVerifier
     from ..services.academic_source_service import AcademicSourceService
     VERIFY_INTEGRATION_AVAILABLE = True
 except ImportError:
-    # Fallback implementations for development/testing
+    # Fallback implementations when VERIFY services are not available
     VERIFY_INTEGRATION_AVAILABLE = False
     
     class CitationVerifier:
-        """Fallback CitationVerifier for development."""
+        """Fallback CitationVerifier when VERIFY services unavailable."""
         async def verify_citation_async(self, claim: str, source: dict) -> dict:
             return {'verified': True, 'confidence': 0.8}
     
     class AcademicSourceService:
-        """Fallback AcademicSourceService for development."""
+        """Fallback AcademicSourceService when VERIFY services unavailable."""
         pass
 
 logger = logging.getLogger(__name__)
 
 
-class PRISMAAssistant:
+class VERIFYPRISMAIntegration:
     """
-    The complete PRISMA assistant that handles the grunt work of systematic reviews.
-    Honest about limitations, focused on actually useful automation.
+    VERIFY system component for automated systematic review functionality.
     
-    Integrated with STORM-Academic VERIFY system for enhanced validation.
+    Part of the STORM-Academic VERIFY system, this component provides PRISMA-compliant
+    systematic review automation. Handles the automated aspects of systematic reviews
+    while maintaining methodological rigor.
+    
+    Core VERIFY functionality - not a separate assistant system.
     """
     
     def __init__(self, lm_model=None, retrieval_module=None, 
@@ -74,12 +81,12 @@ class PRISMAAssistant:
         self.time_saved = 0
         self.papers_processed = 0
     
-    async def assist_systematic_review(self, 
-                                     research_question: str,
-                                     papers: Optional[List[Paper]] = None,
-                                     generate_draft: bool = False) -> Dict[str, Any]:
+    async def conduct_systematic_review(self, 
+                                      research_question: str,
+                                      papers: Optional[List[Paper]] = None,
+                                      generate_draft: bool = False) -> Dict[str, Any]:
         """
-        Main entry point for systematic review assistance.
+        VERIFY system's systematic review automation functionality.
         
         Args:
             research_question: The research question in natural language
@@ -87,9 +94,9 @@ class PRISMAAssistant:
             generate_draft: Whether to generate zero draft (default: False)
             
         Returns:
-            Dictionary with all assistance outputs and time saved
+            Dictionary with VERIFY system outputs and automation metrics
         """
-        logger.info(f"Starting PRISMA assistance for: {research_question}")
+        logger.info(f"Starting VERIFY systematic review automation for: {research_question}")
         
         # 1. Develop comprehensive search strategy
         logger.info("Building search strategy...")
@@ -149,5 +156,5 @@ class PRISMAAssistant:
         return papers
 
 
-# Export main class
-__all__ = ['PRISMAAssistant']
+# Export VERIFY system component
+__all__ = ['VERIFYPRISMAIntegration']

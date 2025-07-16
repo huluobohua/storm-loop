@@ -19,7 +19,7 @@ from ..modules.prisma import (
     ScreeningResult,
     PRISMAScreener
 )
-from ..modules.prisma_assistant_refactored import PRISMAAssistant
+from ..modules.prisma_assistant_refactored import VERIFYPRISMAIntegration
 
 # Check integration availability
 try:
@@ -90,7 +90,7 @@ class PRISMAScreenerAgent(BaseAgent):
         )
         
         # Initialize PRISMA components
-        self.prisma_assistant = PRISMAAssistant()
+        self.prisma_assistant = VERIFYPRISMAIntegration()
         self.prisma_screener = PRISMAScreener()
         
         # Track performance metrics
@@ -178,7 +178,7 @@ class PRISMAScreenerAgent(BaseAgent):
             raise ValueError("No research question provided")
         
         # Run complete PRISMA assistance
-        assistance_results = await self.prisma_assistant.assist_systematic_review(
+        assistance_results = await self.prisma_assistant.conduct_systematic_review(
             research_question=task.research_question,
             papers=task.papers,
             generate_draft=task.generate_draft

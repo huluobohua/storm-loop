@@ -20,7 +20,7 @@ from ..modules.prisma import (
     DataExtractionHelper,
     ZeroDraftGenerator
 )
-from ..modules.prisma_assistant_refactored import PRISMAAssistant
+from ..modules.prisma_assistant_refactored import VERIFYPRISMAIntegration
 
 # Check integration availability
 try:
@@ -99,7 +99,7 @@ class SystematicReviewWorkflow:
             self.agent_registry.register_agent(self.prisma_agent)
         
         # Initialize PRISMA components
-        self.prisma_assistant = PRISMAAssistant()
+        self.prisma_assistant = VERIFYPRISMAIntegration()
         self.search_builder = SearchStrategyBuilder()
         
         # Track workflow state

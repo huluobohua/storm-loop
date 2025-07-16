@@ -11,17 +11,15 @@ from typing import Dict, List, Tuple, Optional
 from .core import SearchStrategy
 
 # Integration with existing STORM-Academic VERIFY system
-# NOTE: Imports temporarily disabled due to langchain dependency conflicts
-# Will be re-enabled once dependency issues are resolved
 try:
     from ...services.academic_source_service import AcademicSourceService
     VERIFY_INTEGRATION_AVAILABLE = True
 except ImportError:
-    # Fallback implementations for development/testing
+    # Fallback implementation when VERIFY services are not available
     VERIFY_INTEGRATION_AVAILABLE = False
     
     class AcademicSourceService:
-        """Fallback AcademicSourceService for development."""
+        """Fallback AcademicSourceService when VERIFY services unavailable."""
         def get_available_databases(self) -> List[str]:
             return ['pubmed', 'embase', 'cochrane', 'scopus', 'web_of_science']
 

@@ -13,17 +13,15 @@ from collections import defaultdict
 from .core import Paper, SearchStrategy, ScreeningResult
 
 # Integration with existing STORM-Academic VERIFY system
-# NOTE: Imports temporarily disabled due to langchain dependency conflicts
-# Will be re-enabled once dependency issues are resolved
 try:
     from ...services.citation_verifier import CitationVerifier
     VERIFY_INTEGRATION_AVAILABLE = True
 except ImportError:
-    # Fallback implementations for development/testing
+    # Fallback implementation when VERIFY services are not available
     VERIFY_INTEGRATION_AVAILABLE = False
     
     class CitationVerifier:
-        """Fallback CitationVerifier for development."""
+        """Fallback CitationVerifier when VERIFY services unavailable."""
         async def verify_citation_async(self, claim: str, source: dict) -> dict:
             return {'verified': True, 'confidence': 0.8}
 
