@@ -11,17 +11,23 @@ from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 import asyncio
 
-# PRISMA components (avoiding package imports due to dependency issues)
-from ..modules.prisma_assistant import (
-    PRISMAAssistant,
+# PRISMA components - refactored modules
+from ..modules.prisma import (
     Paper,
     SearchStrategy,
     SearchStrategyBuilder,
     ScreeningAssistant,
     DataExtractionHelper,
-    ZeroDraftGenerator,
-    VERIFY_INTEGRATION_AVAILABLE
+    ZeroDraftGenerator
 )
+from ..modules.prisma_assistant_refactored import PRISMAAssistant
+
+# Check integration availability
+try:
+    from ..services.citation_verifier import CitationVerifier
+    VERIFY_INTEGRATION_AVAILABLE = True
+except ImportError:
+    VERIFY_INTEGRATION_AVAILABLE = False
 
 # Agent components  
 from ..agents.prisma_screener import PRISMAScreenerAgent, PRISMATask, PRISMAAgentCoordinator

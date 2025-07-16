@@ -12,15 +12,21 @@ from dataclasses import dataclass
 # Base agent infrastructure
 from .base_agent import BaseAgent, AgentCapability
 
-# PRISMA Assistant core
-from ..modules.prisma_assistant import (
-    PRISMAAssistant, 
-    PRISMAScreener,
+# PRISMA Assistant core - refactored modules
+from ..modules.prisma import (
     Paper,
     SearchStrategy,
     ScreeningResult,
-    VERIFY_INTEGRATION_AVAILABLE
+    PRISMAScreener
 )
+from ..modules.prisma_assistant_refactored import PRISMAAssistant
+
+# Check integration availability
+try:
+    from ..services.citation_verifier import CitationVerifier
+    VERIFY_INTEGRATION_AVAILABLE = True
+except ImportError:
+    VERIFY_INTEGRATION_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
