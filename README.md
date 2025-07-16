@@ -22,4 +22,4 @@ This system combines:
 2. **Academic Enhancements** - Research verification and quality assurance
 3. **Verification Services** - Citation and claim validation
 
-**Note**: This system does NOT include a "PRISMA Assistant" - that was a conceptual misunderstanding. The actual system focuses on enhancing STORM with academic verification capabilities.
+The system focuses on enhancing STORM with academic verification capabilities.
