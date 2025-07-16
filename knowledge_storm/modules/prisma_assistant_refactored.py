@@ -59,10 +59,16 @@ class PRISMAAssistant:
         self.academic_source_service = academic_source_service or AcademicSourceService()
         
         # Initialize focused components with VERIFY integration
-        self.search_builder = SearchStrategyBuilder()
+        self.search_builder = SearchStrategyBuilder(academic_source_service=self.academic_source_service)
         self.screening_assistant = ScreeningAssistant(citation_verifier=self.citation_verifier)
-        self.extraction_helper = DataExtractionHelper()
-        self.draft_generator = ZeroDraftGenerator(lm_model)
+        self.extraction_helper = DataExtractionHelper(
+            citation_verifier=self.citation_verifier,
+            academic_source_service=self.academic_source_service
+        )
+        self.draft_generator = ZeroDraftGenerator(
+            lm_model=lm_model,
+            citation_verifier=self.citation_verifier
+        )
         
         # Track metrics
         self.time_saved = 0

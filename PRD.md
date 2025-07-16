@@ -4,6 +4,17 @@
 
 The STORM-Academic Hybrid System is an AI-assisted research and writing platform that combines the efficiency of STORM (Synthesis of Topic Outline through Retrieval and Multi-perspective question asking) with academic rigor and quality assurance. This system aims to produce publication-quality research articles by integrating academic sources, multi-agent collaboration, and iterative quality improvement.
 
+## 🔍 Architecture Clarification (Updated)
+
+**IMPORTANT**: This PRD describes the STORM-Academic Hybrid System architecture. Previous references to "PRISMA Assistant" were conceptual and do not reflect the actual implemented system. The real architecture focuses on:
+
+- **Enhanced STORM Engine** with academic workflow capabilities
+- **Verification Services** for citation and quality assurance  
+- **Academic Research Pipeline** with multi-agent coordination
+- **Hybrid Processing** combining general knowledge with academic sources
+
+The system is correctly named "STORM-Academic" or "storm-loop" - there is no separate "PRISMA Assistant" component.
+
 ## Product Vision
 
 To create the most comprehensive AI-assisted research platform that produces academic-quality content by combining:

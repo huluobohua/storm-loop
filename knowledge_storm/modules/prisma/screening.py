@@ -162,17 +162,41 @@ class ScreeningAssistant:
         Screen a single paper and return (decision, reason, confidence).
         Enhanced with VERIFY system for additional validation.
         """
-        # Combine title and abstract for screening
         text = f"{paper.title} {paper.abstract}".lower()
         
-        # Check high-confidence exclusion patterns
+        # Check high-confidence exclusion patterns first
+        exclusion_result = self._check_exclusion_patterns(text)
+        if exclusion_result:
+            return exclusion_result
+        
+        # Check inclusion indicators
+        inclusion_score, inclusion_reasons = self._check_inclusion_indicators(text)
+        
+        # Enhanced validation with VERIFY system for high-quality papers
+        inclusion_score, inclusion_reasons = await self._verify_with_system(
+            paper, inclusion_score, inclusion_reasons
+        )
+        
+        # Check against search strategy criteria
+        criteria_matches = self._check_inclusion_criteria(text, criteria)
+        exclusion_matches = self._check_exclusion_criteria(text, criteria)
+        
+        # Apply decision logic with confidence scoring
+        return self._make_screening_decision(
+            inclusion_score, inclusion_reasons, criteria_matches, exclusion_matches
+        )
+    
+    def _check_exclusion_patterns(self, text: str) -> Optional[Tuple[str, str, float]]:
+        """Check high-confidence exclusion patterns."""
         for category, patterns in self.exclusion_patterns.items():
             for pattern in patterns:
                 if re.search(pattern, text, re.IGNORECASE):
                     confidence = 0.9  # High confidence exclusion
                     return 'exclude', f"Excluded: {category.replace('_', ' ')}", confidence
-        
-        # Check inclusion indicators
+        return None
+    
+    def _check_inclusion_indicators(self, text: str) -> Tuple[int, List[str]]:
+        """Check inclusion indicators and return score and reasons."""
         inclusion_score = 0
         inclusion_reasons = []
         
@@ -182,7 +206,11 @@ class ScreeningAssistant:
                     inclusion_score += 1
                     inclusion_reasons.append(category.replace('_', ' '))
         
-        # Enhanced validation with VERIFY system for high-quality papers
+        return inclusion_score, inclusion_reasons
+    
+    async def _verify_with_system(self, paper: Paper, inclusion_score: int, 
+                                 inclusion_reasons: List[str]) -> Tuple[int, List[str]]:
+        """Enhanced validation with VERIFY system for high-quality papers."""
         if inclusion_score >= 2:
             try:
                 # Use existing citation verification for additional validation
@@ -199,35 +227,47 @@ class ScreeningAssistant:
             except Exception as e:
                 logger.debug(f"VERIFY integration error for paper {paper.id}: {e}")
         
-        # Check against inclusion criteria
+        return inclusion_score, inclusion_reasons
+    
+    def _check_inclusion_criteria(self, text: str, criteria: SearchStrategy) -> int:
+        """Check against inclusion criteria."""
         criteria_matches = 0
         for criterion in criteria.inclusion_criteria:
             criterion_keywords = criterion.lower().split()
             if any(keyword in text for keyword in criterion_keywords):
                 criteria_matches += 1
-        
-        # Check against exclusion criteria
+        return criteria_matches
+    
+    def _check_exclusion_criteria(self, text: str, criteria: SearchStrategy) -> int:
+        """Check against exclusion criteria."""
         exclusion_matches = 0
         for criterion in criteria.exclusion_criteria:
             criterion_keywords = criterion.lower().split()
             if any(keyword in text for keyword in criterion_keywords):
                 exclusion_matches += 1
-        
-        # Decision logic with confidence scoring
+        return exclusion_matches
+    
+    def _make_screening_decision(self, inclusion_score: int, inclusion_reasons: List[str],
+                                criteria_matches: int, exclusion_matches: int) -> Tuple[str, str, float]:
+        """Apply decision logic with confidence scoring."""
+        # Check exclusion criteria first
         if exclusion_matches > 0:
             confidence = min(0.8, 0.6 + (exclusion_matches * 0.1))
             return 'exclude', f"Matches exclusion criteria", confidence
         
+        # Check strong inclusion indicators
         if inclusion_score >= 3:
             confidence = min(0.9, 0.7 + (inclusion_score * 0.05))
             reasons = ', '.join(inclusion_reasons[:3])  # Top 3 reasons
             return 'include', f"Strong inclusion indicators: {reasons}", confidence
         
+        # Check moderate inclusion indicators
         if inclusion_score >= 2:
             confidence = 0.7
             reasons = ', '.join(inclusion_reasons)
             return 'include', f"Inclusion indicators: {reasons}", confidence
         
+        # Check criteria matches
         if criteria_matches >= 2:
             confidence = 0.6
             return 'include', f"Matches inclusion criteria", confidence
