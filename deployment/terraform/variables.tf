@@ -16,13 +16,13 @@ variable "environment" {
 variable "aws_region" {
   description = "AWS region for deployment"
   type        = string
-  default     = "us-west-2"
+  default     = "us-east-1"
 }
 
 variable "cluster_name" {
   description = "EKS cluster name"
   type        = string
-  default     = ""
+  default     = "storm-production-eks"
 }
 
 variable "kubernetes_version" {
@@ -57,13 +57,9 @@ variable "database_subnet_cidrs" {
 }
 
 variable "allowed_cidr_blocks" {
-  description = "CIDR blocks allowed to access the cluster API - MUST be specified for security"
+  description = "CIDR blocks allowed to access the cluster API (deprecated - cluster uses private-only access)"
   type        = list(string)
-  # No default - force users to explicitly specify allowed IPs
-  validation {
-    condition     = length(var.allowed_cidr_blocks) > 0
-    error_message = "At least one CIDR block must be specified for cluster access. Never use 0.0.0.0/0 in production."
-  }
+  default     = []  # Not used in private-only configuration
 }
 
 # EKS Node Groups
@@ -130,45 +126,29 @@ variable "log_retention_days" {
   default     = 30
 }
 
-# API Keys (sensitive) - MUST be provided via environment variables
+# API Keys (sensitive)
 variable "anthropic_api_key" {
-  description = "Anthropic API key - provide via TF_VAR_anthropic_api_key environment variable"
+  description = "Anthropic API key"
   type        = string
   sensitive   = true
-  validation {
-    condition     = length(var.anthropic_api_key) > 0
-    error_message = "Anthropic API key must be provided via TF_VAR_anthropic_api_key environment variable."
-  }
 }
 
 variable "openai_api_key" {
-  description = "OpenAI API key - provide via TF_VAR_openai_api_key environment variable"
+  description = "OpenAI API key"
   type        = string
   sensitive   = true
-  validation {
-    condition     = length(var.openai_api_key) > 0
-    error_message = "OpenAI API key must be provided via TF_VAR_openai_api_key environment variable."
-  }
 }
 
 variable "google_api_key" {
-  description = "Google API key - provide via TF_VAR_google_api_key environment variable"
+  description = "Google API key"
   type        = string
   sensitive   = true
-  validation {
-    condition     = length(var.google_api_key) > 0
-    error_message = "Google API key must be provided via TF_VAR_google_api_key environment variable."
-  }
 }
 
 variable "perplexity_api_key" {
-  description = "Perplexity API key - provide via TF_VAR_perplexity_api_key environment variable"
+  description = "Perplexity API key"
   type        = string
   sensitive   = true
-  validation {
-    condition     = length(var.perplexity_api_key) > 0
-    error_message = "Perplexity API key must be provided via TF_VAR_perplexity_api_key environment variable."
-  }
 }
 
 # Domain
@@ -189,23 +169,4 @@ variable "tags" {
   description = "Additional tags for resources"
   type        = map(string)
   default     = {}
-}
-
-# Service Account Configuration
-variable "app_k8s_namespace" {
-  description = "Kubernetes namespace for the application"
-  type        = string
-  default     = "storm-production"
-}
-
-variable "app_k8s_service_account_name" {
-  description = "Kubernetes service account name for the application"
-  type        = string
-  default     = "storm-app"
-}
-
-variable "project_owner" {
-  description = "Project owner for tagging"
-  type        = string
-  default     = ""
 }

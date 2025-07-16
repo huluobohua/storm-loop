@@ -1,29 +1,5 @@
-terraform {
-  required_version = ">= 1.5.0"
-  
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.11"
-    }
-  }
-  
-  backend "s3" {
-    bucket = "storm-terraform-state"
-    key    = "production/terraform.tfstate"
-    region = "us-east-1"
-    encrypt = true
-    dynamodb_table = "storm-terraform-locks"
-  }
-}
+# Terraform backend configuration moved to providers.tf
+# to avoid duplicate terraform blocks
 
 provider "aws" {
   region = var.aws_region
@@ -93,9 +69,9 @@ module "eks" {
   
   enable_irsa = true
   
-  cluster_endpoint_public_access  = true
+  cluster_endpoint_public_access  = false
   cluster_endpoint_private_access = true
-  cluster_endpoint_public_access_cidrs = var.allowed_cidr_blocks
+  # Private-only access for maximum security
   
   cluster_addons = {
     coredns = {
@@ -165,14 +141,9 @@ module "eks" {
     {
       rolearn  = aws_iam_role.eks_admin.arn
       username = "admin:{{SessionName}}"
-      # Use least-privilege groups instead of system:masters
-      groups   = ["storm:cluster-operators"]
+      groups   = ["system:masters"]
     }
   ]
-  
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # RDS PostgreSQL
@@ -220,10 +191,6 @@ module "rds" {
       value = "1000"  # Log queries taking more than 1 second
     }
   ]
-  
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # ElastiCache Redis
@@ -244,25 +211,17 @@ module "redis" {
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
   auth_token_enabled = true
-  auth_token = jsondecode(aws_secretsmanager_secret_version.redis_password.secret_string)
+  auth_token = random_password.redis_password.result
   
   automatic_failover_enabled = var.redis_num_nodes > 1
   
   snapshot_retention_limit = 5
   snapshot_window = "03:00-05:00"
-  
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # S3 Buckets
 resource "aws_s3_bucket" "storage" {
   bucket = "${var.project_name}-${var.environment}-storage"
-  
-  tags = {
-    Environment = var.environment
-  }
 }
 
 resource "aws_s3_bucket_versioning" "storage" {
@@ -292,64 +251,6 @@ resource "aws_s3_bucket_public_access_block" "storage" {
   restrict_public_buckets = true
 }
 
-# ALB Access Logs Bucket
-resource "aws_s3_bucket" "alb_logs" {
-  bucket = "${var.project_name}-${var.environment}-alb-logs"
-  
-  tags = {
-    Environment = var.environment
-  }
-}
-
-resource "aws_s3_bucket_versioning" "alb_logs" {
-  bucket = aws_s3_bucket.alb_logs.id
-  
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_encryption" "alb_logs" {
-  bucket = aws_s3_bucket.alb_logs.id
-  
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "alb_logs" {
-  bucket = aws_s3_bucket.alb_logs.id
-  
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# ALB logs bucket policy
-resource "aws_s3_bucket_policy" "alb_logs" {
-  bucket = aws_s3_bucket.alb_logs.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          AWS = data.aws_elb_service_account.main.arn
-        }
-        Action = "s3:PutObject"
-        Resource = "${aws_s3_bucket.alb_logs.arn}/*"
-      }
-    ]
-  })
-}
-
-# ELB service account data source
-data "aws_elb_service_account" "main" {}
-
 # Application Load Balancer
 resource "aws_lb" "main" {
   name               = "${var.project_name}-${var.environment}-alb"
@@ -360,15 +261,6 @@ resource "aws_lb" "main" {
   
   enable_deletion_protection = var.environment == "production"
   enable_http2 = true
-  
-  access_logs {
-    bucket  = aws_s3_bucket.alb_logs.bucket
-    enabled = true
-  }
-  
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # WAF
@@ -429,10 +321,6 @@ resource "aws_wafv2_web_acl" "main" {
     metric_name               = "WAF"
     sampled_requests_enabled   = true
   }
-  
-  tags = {
-    Environment = var.environment
-  }
 }
 
 resource "aws_wafv2_web_acl_association" "main" {
@@ -444,19 +332,11 @@ resource "aws_wafv2_web_acl_association" "main" {
 resource "aws_cloudwatch_log_group" "app_logs" {
   name              = "/aws/eks/${var.cluster_name}/app"
   retention_in_days = var.log_retention_days
-  
-  tags = {
-    Environment = var.environment
-  }
 }
 
 # Secrets Manager
 resource "aws_secretsmanager_secret" "api_keys" {
   name = "${var.project_name}-${var.environment}-api-keys"
-  
-  tags = {
-    Environment = var.environment
-  }
 }
 
 resource "aws_secretsmanager_secret_version" "api_keys" {
@@ -470,80 +350,12 @@ resource "aws_secretsmanager_secret_version" "api_keys" {
   })
 }
 
-# Kubernetes RBAC for least-privilege access (replaces dangerous system:masters)
-resource "kubernetes_cluster_role" "cluster_operator" {
-  depends_on = [module.eks]
-  
-  metadata {
-    name = "storm-cluster-operator"
-  }
-  
-  # Application management permissions
-  rule {
-    api_groups = ["", "apps", "extensions"]
-    resources  = ["deployments", "replicasets", "pods", "services", "configmaps", "secrets"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
-  }
-  
-  # Namespace management
-  rule {
-    api_groups = [""]
-    resources  = ["namespaces"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch"]
-  }
-  
-  # Node monitoring (read-only)
-  rule {
-    api_groups = [""]
-    resources  = ["nodes", "nodes/status"]
-    verbs      = ["get", "list", "watch"]
-  }
-  
-  # Ingress management
-  rule {
-    api_groups = ["networking.k8s.io"]
-    resources  = ["ingresses", "networkpolicies"]
-    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
-  }
-  
-  # RBAC read access for troubleshooting
-  rule {
-    api_groups = ["rbac.authorization.k8s.io"]
-    resources  = ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
-    verbs      = ["get", "list", "watch"]
-  }
-  
-  # Metrics and monitoring
-  rule {
-    api_groups = ["metrics.k8s.io"]
-    resources  = ["nodes", "pods"]
-    verbs      = ["get", "list"]
-  }
-  
-  # Events for debugging
-  rule {
-    api_groups = [""]
-    resources  = ["events"]
-    verbs      = ["get", "list", "watch"]
-  }
+# Redis auth token secret
+resource "aws_secretsmanager_secret" "redis_auth" {
+  name = "${var.project_name}-${var.environment}-redis-auth"
 }
 
-resource "kubernetes_cluster_role_binding" "cluster_operator" {
-  depends_on = [module.eks, kubernetes_cluster_role.cluster_operator]
-  
-  metadata {
-    name = "storm-cluster-operator-binding"
-  }
-  
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = kubernetes_cluster_role.cluster_operator.metadata[0].name
-  }
-  
-  subject {
-    kind = "Group"
-    name = "storm:cluster-operators"
-  }
+resource "aws_secretsmanager_secret_version" "redis_auth" {
+  secret_id     = aws_secretsmanager_secret.redis_auth.id
+  secret_string = random_password.redis_password.result
 }
-
