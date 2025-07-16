@@ -9,6 +9,7 @@ import re
 from typing import Dict, Any, Optional
 
 from .core import Paper, ExtractionTemplate
+from .abstract_analyzer import AbstractAnalyzer
 
 # Integration with existing STORM-Academic VERIFY system
 try:
@@ -40,6 +41,9 @@ class DataExtractionHelper:
         # Integration with existing STORM-Academic VERIFY system
         self.citation_verifier = citation_verifier or CitationVerifier()
         self.academic_source_service = academic_source_service or AcademicSourceService()
+        
+        # Initialize abstract analyzer for SRP compliance
+        self.abstract_analyzer = AbstractAnalyzer()
         self.standard_templates = {
             'clinical_trial': ExtractionTemplate(
                 fields={
@@ -152,35 +156,18 @@ class DataExtractionHelper:
             'results': {}
         }
         
-        # Enhanced abstract analysis
-        abstract_info = []
-        if paper.abstract:
-            # Extract sample size from abstract
-            import re
-            sample_match = re.search(r'(?:n\s*=?\s*(\d+)|(\d+)\s+participants?|(\d+)\s+subjects?)', paper.abstract, re.IGNORECASE)
-            if sample_match:
-                sample_size = sample_match.group(1) or sample_match.group(2) or sample_match.group(3)
-                extracted['sample_size'] = int(sample_size)
-                abstract_info.append(f"sample size: {sample_size}")
-            
-            # Look for study design indicators
-            if re.search(r'randomized controlled trial|rct', paper.abstract, re.IGNORECASE):
-                abstract_info.append("randomized controlled trial")
-            if re.search(r'cohort study', paper.abstract, re.IGNORECASE):
-                abstract_info.append("cohort study")
-            if re.search(r'case.?control', paper.abstract, re.IGNORECASE):
-                abstract_info.append("case-control study")
-            
-            # Look for pain/outcome measures
-            pain_match = re.search(r'pain', paper.abstract, re.IGNORECASE)
-            outcome_match = re.search(r'outcome|measure', paper.abstract, re.IGNORECASE)
-            
-            if pain_match:
-                abstract_info.append("pain")
-            elif outcome_match:
-                abstract_info.append("outcome measures")
+        # Use dedicated AbstractAnalyzer for SRP compliance
+        abstract_analysis = self.abstract_analyzer.analyze_abstract(paper)
         
-        extracted['abstract_analysis'] = f"Analysis extracted: {', '.join(abstract_info)}" if abstract_info else f"Abstract analysis for {paper.title}: Contains study information"
+        # Update extracted data with analysis results
+        if abstract_analysis.sample_size:
+            extracted['sample_size'] = abstract_analysis.sample_size
+        
+        if abstract_analysis.study_design:
+            extracted['study_type'] = abstract_analysis.study_design
+        
+        extracted['abstract_analysis'] = abstract_analysis.analysis_summary
+        extracted['analysis_confidence'] = abstract_analysis.confidence_score
         
         # Copy sample_size if not extracted from abstract
         if not extracted['sample_size'] and hasattr(paper, 'sample_size') and paper.sample_size:

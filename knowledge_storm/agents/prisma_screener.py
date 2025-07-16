@@ -242,86 +242,10 @@ class PRISMAScreenerAgent(BaseAgent):
         }
 
 
-class PRISMAAgentCoordinator:
-    """
-    Coordinator for PRISMA Agent operations within the multi-agent system.
-    Handles task distribution and agent communication for systematic reviews.
-    """
-    
-    def __init__(self, prisma_agent: Optional[PRISMAScreenerAgent] = None):
-        self.prisma_agent = prisma_agent or PRISMAScreenerAgent()
-        self.active_tasks = {}
-        
-    async def distribute_systematic_review_task(self, 
-                                              research_question: str,
-                                              papers: Optional[List[Paper]] = None,
-                                              task_preferences: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """
-        Distribute systematic review task to PRISMA agent.
-        
-        Args:
-            research_question: The research question for systematic review
-            papers: Optional list of papers to screen
-            task_preferences: Optional preferences for task execution
-            
-        Returns:
-            Task execution results from PRISMA agent
-        """
-        # Create task specification
-        task = PRISMATask(
-            task_type="systematic_review_assistance",
-            research_question=research_question,
-            papers=papers,
-            confidence_threshold=task_preferences.get('confidence_threshold', 0.8) if task_preferences else 0.8,
-            generate_draft=task_preferences.get('generate_draft', False) if task_preferences else False
-        )
-        
-        # Execute task
-        task_id = f"prisma_task_{len(self.active_tasks) + 1}"
-        self.active_tasks[task_id] = task
-        
-        try:
-            results = await self.prisma_agent.execute_task(task)
-            results['task_id'] = task_id
-            return results
-            
-        except Exception as e:
-            logger.error(f"Systematic review task failed: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'task_id': task_id,
-                'agent_id': self.prisma_agent.agent_id
-            }
-    
-    async def screen_papers_batch(self, 
-                                papers: List[Paper],
-                                inclusion_patterns: Optional[List[str]] = None,
-                                exclusion_patterns: Optional[List[str]] = None) -> Dict[str, Any]:
-        """
-        Screen a batch of papers using PRISMA methodology.
-        
-        Args:
-            papers: List of papers to screen
-            inclusion_patterns: Optional patterns for inclusion
-            exclusion_patterns: Optional patterns for exclusion
-            
-        Returns:
-            Screening results
-        """
-        task = PRISMATask(
-            task_type="screen_papers",
-            papers=papers,
-            include_patterns=inclusion_patterns,
-            exclude_patterns=exclusion_patterns
-        )
-        
-        return await self.prisma_agent.execute_task(task)
 
 
 # Export main classes
 __all__ = [
     'PRISMAScreenerAgent',
-    'PRISMATask', 
-    'PRISMAAgentCoordinator'
+    'PRISMATask'
 ]

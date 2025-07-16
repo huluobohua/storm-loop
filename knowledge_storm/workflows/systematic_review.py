@@ -30,7 +30,8 @@ except ImportError:
     VERIFY_INTEGRATION_AVAILABLE = False
 
 # Agent components  
-from ..agents.prisma_screener import PRISMAScreenerAgent, PRISMATask, PRISMAAgentCoordinator
+from ..agents.prisma_screener import PRISMAScreenerAgent, PRISMATask
+from ..agents.prisma_coordinator import PRISMAAgentCoordinator
 from ..agents.base_agent import AgentRegistry
 
 logger = logging.getLogger(__name__)
