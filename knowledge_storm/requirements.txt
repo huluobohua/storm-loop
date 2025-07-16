@@ -9,4 +9,4 @@ qdrant-client
 langchain-qdrant
 numpy==1.26.4
 streamlit==1.22.0
-pip install markdown==3.4.3
+markdown==3.4.3
