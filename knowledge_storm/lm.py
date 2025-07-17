@@ -9,10 +9,15 @@ try:
     import dspy
 except ModuleNotFoundError:  # pragma: no cover - handled for optional dep
     dspy = None
+
+# Install compatibility shim for legacy dspy imports
+from dspy_compatibility_shim import install_dspy_compatibility_shim
+install_dspy_compatibility_shim()
+
 import requests
 
-
-from dspy.dsp.modules.hf_client import send_hftgi_request_v01_wrapped
+# Legacy import removed - TGIClient now uses modern dspy.HFClientTGI
+# from dspy.dsp.modules.hf_client import send_hftgi_request_v01_wrapped
 from openai import OpenAI
 from transformers import AutoTokenizer
 
@@ -22,7 +27,7 @@ except ImportError:
     RateLimitError = None
 
 
-class OpenAIModel(dspy.OpenAI):
+class OpenAIModel(dspy.LM):
     """A wrapper class for dspy.OpenAI."""
 
     def __init__(
@@ -32,7 +37,12 @@ class OpenAIModel(dspy.OpenAI):
         model_type: Literal["chat", "text"] = None,
         **kwargs,
     ):
-        super().__init__(model=model, api_key=api_key, model_type=model_type, **kwargs)
+        # Store OpenAI-specific parameters separately from dspy.LM
+        self.api_key = api_key
+        self.model_type = model_type
+        
+        # Initialize parent with only supported parameters
+        super().__init__(model=model, **kwargs)
         self._token_usage_lock = threading.Lock()
         self.prompt_tokens = 0
         self.completion_tokens = 0
@@ -58,6 +68,10 @@ class OpenAIModel(dspy.OpenAI):
         self.completion_tokens = 0
 
         return usage
+
+    def basic_request(self, prompt: str, **kwargs):
+        """Core request method that delegates to the request method"""
+        return self.request(prompt, **kwargs)
 
     def __call__(
         self,
@@ -112,7 +126,7 @@ class OpenAIModel(dspy.OpenAI):
         return completions
 
 
-class DeepSeekModel(dspy.OpenAI):
+class DeepSeekModel(dspy.LM):
     """A wrapper class for DeepSeek API, compatible with dspy.OpenAI."""
 
     def __init__(
@@ -201,7 +215,7 @@ class DeepSeekModel(dspy.OpenAI):
         return completions
 
 
-class OllamaClient(dspy.OllamaLocal):
+class OllamaClient(dspy.LM):
     """A wrapper class for dspy.OllamaClient."""
 
     def __init__(self, model, port, url="http://localhost", **kwargs):
@@ -214,69 +228,51 @@ class OllamaClient(dspy.OllamaLocal):
         self.kwargs = {**self.kwargs, **kwargs}
 
 
-class TGIClient(dspy.HFClientTGI):
+class TGIClient(dspy.LM):
+    """Modern TGI client using dspy.HFClientTGI instead of legacy mock functions"""
+    
     def __init__(self, model, port, url, http_request_kwargs=None, **kwargs):
-        super().__init__(
+        # Initialize with modern dspy.HFClientTGI
+        self._modern_client = dspy.HFClientTGI(
             model=model,
             port=port,
             url=url,
-            http_request_kwargs=http_request_kwargs,
-            **kwargs,
+            http_request_kwargs=http_request_kwargs or {},
+            **kwargs
         )
+        
+        # Also initialize parent for compatibility
+        super().__init__(
+            model=model,
+            **kwargs
+        )
+        
+        # Store original parameters for backward compatibility
+        self.model = model
+        self.port = port
+        self.url = url
+        self.ports = [port] if isinstance(port, int) else port  # Support single port or list
+        self.headers = {}
+        self.http_request_kwargs = http_request_kwargs or {}
 
+    def basic_request(self, prompt: str, **kwargs):
+        """Delegate to modern dspy.HFClientTGI basic_request method"""
+        return self._modern_client.basic_request(prompt, **kwargs)
+    
+    def __call__(self, prompt: str, only_completed: bool = True, return_sorted: bool = False, **kwargs):
+        """Delegate to modern dspy.HFClientTGI __call__ method"""
+        return self._modern_client(prompt, only_completed=only_completed, return_sorted=return_sorted, **kwargs)
+    
     def _generate(self, prompt, **kwargs):
-        """Copied from dspy/dsp/modules/hf_client.py with the addition of removing hard-coded parameters."""
-        kwargs = {**self.kwargs, **kwargs}
-
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "do_sample": kwargs["n"] > 1,
-                "best_of": kwargs["n"],
-                "details": kwargs["n"] > 1,
-                **kwargs,
-            },
-        }
-
-        payload["parameters"] = openai_to_hf(**payload["parameters"])
-
-        # Comment out the following lines to remove the hard-coded parameters.
-        # payload["parameters"]["temperature"] = max(
-        #     0.1, payload["parameters"]["temperature"],
-        # )
-
-        response = send_hftgi_request_v01_wrapped(
-            f"{self.url}:{random.Random().choice(self.ports)}" + "/generate",
-            url=self.url,
-            ports=tuple(self.ports),
-            json=payload,
-            headers=self.headers,
-            **self.http_request_kwargs,
-        )
-
-        try:
-            json_response = response.json()
-            # completions = json_response["generated_text"]
-
-            completions = [json_response["generated_text"]]
-
-            if (
-                "details" in json_response
-                and "best_of_sequences" in json_response["details"]
-            ):
-                completions += [
-                    x["generated_text"]
-                    for x in json_response["details"]["best_of_sequences"]
-                ]
-
-            response = {"prompt": prompt, "choices": [{"text": c} for c in completions]}
-            return response
-        except Exception:
-            print("Failed to parse JSON response:", response.text)
-            raise Exception("Received invalid JSON response from server")
+        """Legacy method for backward compatibility - delegates to modern implementation"""
+        return self.basic_request(prompt, **kwargs)
+    
+    def generate(self, prompt, **kwargs):
+        """Public generate method for compatibility"""
+        return self.__call__(prompt, **kwargs)
 
 
-class TogetherClient(dspy.dsp.modules.hf.HFModel):
+class TogetherClient(dspy.LM):
     """A wrapper class for dspy.Together."""
 
     def __init__(

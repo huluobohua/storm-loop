@@ -2,6 +2,10 @@ import logging
 import re
 from typing import Union, List
 
+# Install compatibility shim for legacy dspy imports
+from dspy_compatibility_shim import install_dspy_compatibility_shim
+install_dspy_compatibility_shim()
+
 from dspy.dsp.modules.lm import LM
 from dspy.dsp.modules.hf import HFModel
 
