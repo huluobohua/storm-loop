@@ -11,22 +11,8 @@ except ModuleNotFoundError:  # pragma: no cover - handled for optional dep
     dspy = None
 
 # Install compatibility shim for legacy dspy imports
-try:
-    from dspy_compatibility_shim import install_dspy_compatibility_shim
-    install_dspy_compatibility_shim()
-except ImportError:
-    # Fallback: create minimal shim inline
-    import sys
-    import types
-    if dspy is not None:
-        # Create minimal mock modules for legacy imports
-        modules_mod = types.ModuleType("dspy.dsp.modules")
-        hf_client_mod = types.ModuleType("dspy.dsp.modules.hf_client")
-        hf_client_mod.send_hftgi_request_v01_wrapped = lambda *args, **kwargs: {
-            "choices": [{"text": "Mock response"}], "usage": {"total_tokens": 10}
-        }
-        sys.modules["dspy.dsp.modules"] = modules_mod
-        sys.modules["dspy.dsp.modules.hf_client"] = hf_client_mod
+from dspy_compatibility_shim import install_dspy_compatibility_shim
+install_dspy_compatibility_shim()
 
 import requests
 

@@ -67,21 +67,42 @@ class LegacyHFModelWrapper:
         return self._modern_hf(*args, **kwargs)
 
 
+class MockResponse:
+    """Mock response object that mimics requests.Response interface"""
+    
+    def __init__(self, data):
+        self._data = data
+    
+    def json(self):
+        return self._data
+
+
 def mock_send_hftgi_request_v01_wrapped(*args, **kwargs):
     """
     Mock implementation of legacy send_hftgi_request_v01_wrapped
     Provides compatibility for code that depends on this function
+    Returns a response object with .json() method matching expected TGI format
     """
     logging.warning(
         "Using mock implementation of send_hftgi_request_v01_wrapped. "
         "Consider migrating to modern dspy API."
     )
     
-    # Return a mock response structure
-    return {
-        "choices": [{"text": "Mock response for compatibility"}],
-        "usage": {"total_tokens": 10}
+    # Extract prompt from request payload if available
+    json_payload = kwargs.get('json', {})
+    prompt = json_payload.get('inputs', 'default prompt')
+    
+    # Return a mock response that matches TGI API format
+    mock_data = {
+        "generated_text": f"Mock completion for: {prompt[:50]}...",
+        "details": {
+            "finish_reason": "length",
+            "generated_tokens": 10,
+            "best_of_sequences": []
+        }
     }
+    
+    return MockResponse(mock_data)
 
 
 def install_dspy_compatibility_shim():

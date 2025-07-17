@@ -10,4 +10,4 @@ langchain-qdrant
 numpy==1.26.4
 streamlit==1.22.0
 markdown==3.4.3
-lxml_html_clean
+lxml_html_clean  # Required by trafilatura for HTML cleaning functionality
