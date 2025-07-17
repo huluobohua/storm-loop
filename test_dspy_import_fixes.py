@@ -289,8 +289,48 @@ class TestDspyImportCompatibility:
             assert persona_generator is not None
             # Verify expected functionality exists
             assert hasattr(persona_generator, 'get_wiki_page_title_and_toc')
+            assert hasattr(persona_generator, 'CreateWriterWithPersona')
+            assert hasattr(persona_generator, 'StormPersonaGenerator')
         except ImportError as e:
             pytest.fail(f"Failed to import persona_generator: {e}")
+    
+    def test_persona_generator_uses_modern_dspy_api(self):
+        """
+        Test that persona_generator classes use modern dspy API instead of legacy dsp.modules
+        """
+        try:
+            import knowledge_storm.storm_wiki.modules.persona_generator as pg
+            import dspy
+            import inspect
+            from unittest.mock import MagicMock
+            
+            # Check that the source code uses modern dspy API
+            source_code = inspect.getsource(pg)
+            
+            # Should not contain legacy dspy.dsp imports
+            assert "dspy.dsp.LM" not in source_code, "Should not use legacy dspy.dsp.LM"
+            assert "dspy.dsp.HFModel" not in source_code, "Should not use legacy dspy.dsp.HFModel"
+            assert "install_dspy_compatibility_shim" not in source_code, "Should not use compatibility shim"
+            
+            # Should contain modern dspy imports
+            assert "import dspy" in source_code, "Should use modern dspy import"
+            assert "dspy.LM" in source_code, "Should use modern dspy.LM"
+            assert "dspy.HFModel" in source_code, "Should use modern dspy.HFModel"
+            
+            # Test that classes can be instantiated with modern dspy API
+            mock_engine = MagicMock()
+            mock_engine.__class__ = dspy.LM
+            
+            writer = pg.CreateWriterWithPersona(mock_engine)
+            assert writer is not None
+            
+            generator = pg.StormPersonaGenerator(mock_engine)
+            assert generator is not None
+            
+            print("✓ persona_generator successfully migrated to modern dspy API")
+            
+        except Exception as e:
+            pytest.fail(f"persona_generator modern API test failed: {e}")
     
     def test_all_storm_modules_import_cleanly(self):
         """

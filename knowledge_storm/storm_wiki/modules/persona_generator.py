@@ -2,13 +2,6 @@ import logging
 import re
 from typing import Union, List
 
-# Install compatibility shim for legacy dspy imports
-from dspy_compatibility_shim import install_dspy_compatibility_shim
-install_dspy_compatibility_shim()
-
-from dspy.dsp.modules.lm import LM
-from dspy.dsp.modules.hf import HFModel
-
 import dspy
 import requests
 from bs4 import BeautifulSoup
@@ -74,7 +67,7 @@ class GenPersona(dspy.Signature):
 class CreateWriterWithPersona(dspy.Module):
     """Discover different perspectives of researching the topic by reading Wikipedia pages of related topics."""
 
-    def __init__(self, engine: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def __init__(self, engine: Union[dspy.LM, dspy.HFModel]):
         super().__init__()
         self.find_related_topic = dspy.ChainOfThought(FindRelatedTopic)
         self.gen_persona = dspy.ChainOfThought(GenPersona)
@@ -130,11 +123,11 @@ class StormPersonaGenerator:
             generating personas based on the provided engine and topic.
 
     Args:
-        engine (Union[dspy.dsp.LM, dspy.dsp.HFModel]): The underlying engine used for generating
-            personas. It must be an instance of either `dspy.dsp.LM` or `dspy.dsp.HFModel`.
+        engine (Union[dspy.LM, dspy.HFModel]): The underlying engine used for generating
+            personas. It must be an instance of either `dspy.LM` or `dspy.HFModel`.
     """
 
-    def __init__(self, engine: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def __init__(self, engine: Union[dspy.LM, dspy.HFModel]):
         self.create_writer_with_persona = CreateWriterWithPersona(engine=engine)
 
     def generate_persona(self, topic: str, max_num_persona: int = 3) -> List[str]:
