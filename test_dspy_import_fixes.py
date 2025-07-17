@@ -83,6 +83,80 @@ class TestDspyBehavioralCompatibility:
         except Exception as e:
             pytest.fail(f"OpenAIModel recursion test failed: {e}")
     
+    def test_deepseek_model_generates_completion(self):
+        """Test that DeepSeekModel can actually generate completions"""
+        try:
+            import knowledge_storm.lm as lm
+            
+            # Mock the requests.post call for DeepSeek API
+            with patch('requests.post') as mock_post:
+                mock_response = MagicMock()
+                mock_response.json.return_value = {
+                    "choices": [{"message": {"content": "DeepSeek test response"}}],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 8}
+                }
+                mock_response.raise_for_status.return_value = None
+                mock_post.return_value = mock_response
+                
+                model = lm.DeepSeekModel(model="deepseek-chat", api_key="test_key")
+                
+                # Test that it can generate a completion
+                result = model("Test prompt")
+                
+                assert result is not None
+                assert len(result) > 0
+                assert isinstance(result, list)
+                assert "DeepSeek test response" in result[0]
+                
+                # Verify token tracking works
+                assert model.prompt_tokens == 12
+                assert model.completion_tokens == 8
+                
+                # Verify API was called correctly
+                mock_post.assert_called_once()
+                call_args = mock_post.call_args
+                assert call_args[0][0] == "https://api.deepseek.com/v1/chat/completions"
+                assert call_args[1]["headers"]["Authorization"] == "Bearer test_key"
+                assert call_args[1]["json"]["model"] == "deepseek-chat"
+                assert call_args[1]["json"]["messages"][0]["content"] == "Test prompt"
+                
+        except Exception as e:
+            pytest.fail(f"DeepSeekModel behavioral test failed: {e}")
+    
+    def test_deepseek_model_implements_abstract_methods(self):
+        """Test that DeepSeekModel properly implements dspy.LM abstract methods"""
+        try:
+            import knowledge_storm.lm as lm
+            import dspy
+            
+            # Check that all abstract methods are implemented
+            abstract_methods = [method for method in dir(dspy.LM) if hasattr(getattr(dspy.LM, method), '__isabstractmethod__')]
+            implemented_methods = [method for method in abstract_methods if hasattr(lm.DeepSeekModel, method)]
+            
+            assert set(abstract_methods) == set(implemented_methods), \
+                f"Missing abstract methods: {set(abstract_methods) - set(implemented_methods)}"
+            
+            # Test that basic_request works independently
+            with patch('requests.post') as mock_post:
+                mock_response = MagicMock()
+                mock_response.json.return_value = {
+                    "choices": [{"message": {"content": "Basic request test"}}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 3}
+                }
+                mock_response.raise_for_status.return_value = None
+                mock_post.return_value = mock_response
+                
+                model = lm.DeepSeekModel(model="deepseek-chat", api_key="test_key")
+                result = model.basic_request("Test prompt")
+                
+                assert result is not None
+                assert result["choices"][0]["message"]["content"] == "Basic request test"
+                assert model.prompt_tokens == 5
+                assert model.completion_tokens == 3
+                
+        except Exception as e:
+            pytest.fail(f"DeepSeekModel abstract method test failed: {e}")
+    
     def test_all_model_classes_inherit_correctly(self):
         """Test that all model classes properly inherit from dspy.LM"""
         try:
@@ -215,8 +289,48 @@ class TestDspyImportCompatibility:
             assert persona_generator is not None
             # Verify expected functionality exists
             assert hasattr(persona_generator, 'get_wiki_page_title_and_toc')
+            assert hasattr(persona_generator, 'CreateWriterWithPersona')
+            assert hasattr(persona_generator, 'StormPersonaGenerator')
         except ImportError as e:
             pytest.fail(f"Failed to import persona_generator: {e}")
+    
+    def test_persona_generator_uses_modern_dspy_api(self):
+        """
+        Test that persona_generator classes use modern dspy API instead of legacy dsp.modules
+        """
+        try:
+            import knowledge_storm.storm_wiki.modules.persona_generator as pg
+            import dspy
+            import inspect
+            from unittest.mock import MagicMock
+            
+            # Check that the source code uses modern dspy API
+            source_code = inspect.getsource(pg)
+            
+            # Should not contain legacy dspy.dsp imports
+            assert "dspy.dsp.LM" not in source_code, "Should not use legacy dspy.dsp.LM"
+            assert "dspy.dsp.HFModel" not in source_code, "Should not use legacy dspy.dsp.HFModel"
+            assert "install_dspy_compatibility_shim" not in source_code, "Should not use compatibility shim"
+            
+            # Should contain modern dspy imports
+            assert "import dspy" in source_code, "Should use modern dspy import"
+            assert "dspy.LM" in source_code, "Should use modern dspy.LM"
+            assert "dspy.HFModel" in source_code, "Should use modern dspy.HFModel"
+            
+            # Test that classes can be instantiated with modern dspy API
+            mock_engine = MagicMock()
+            mock_engine.__class__ = dspy.LM
+            
+            writer = pg.CreateWriterWithPersona(mock_engine)
+            assert writer is not None
+            
+            generator = pg.StormPersonaGenerator(mock_engine)
+            assert generator is not None
+            
+            print("✓ persona_generator successfully migrated to modern dspy API")
+            
+        except Exception as e:
+            pytest.fail(f"persona_generator modern API test failed: {e}")
     
     def test_all_storm_modules_import_cleanly(self):
         """

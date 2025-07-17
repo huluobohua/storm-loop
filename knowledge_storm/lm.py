@@ -147,7 +147,7 @@ class OpenAIModel(dspy.LM):
 
 
 class DeepSeekModel(dspy.LM):
-    """A wrapper class for DeepSeek API, compatible with dspy.OpenAI."""
+    """A wrapper class for DeepSeek API using modern dspy patterns."""
 
     def __init__(
         self,
@@ -156,17 +156,23 @@ class DeepSeekModel(dspy.LM):
         api_base: str = "https://api.deepseek.com",
         **kwargs,
     ):
-        super().__init__(model=model, api_key=api_key, api_base=api_base, **kwargs)
-        self._token_usage_lock = threading.Lock()
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
+        # Initialize parent with model parameter only
+        super().__init__(model=model)
+        
+        # Store DeepSeek-specific parameters
         self.model = model
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
         self.api_base = api_base
+        
         if not self.api_key:
             raise ValueError(
                 "DeepSeek API key must be provided either as an argument or as an environment variable DEEPSEEK_API_KEY"
             )
+        
+        # Token usage tracking
+        self._token_usage_lock = threading.Lock()
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
 
     def log_usage(self, response):
         """Log the total tokens from the DeepSeek API response."""
@@ -188,6 +194,14 @@ class DeepSeekModel(dspy.LM):
         self.completion_tokens = 0
         return usage
 
+    def basic_request(self, prompt: str, **kwargs):
+        """Core request method implementing the abstract method from dspy.LM"""
+        response = self._create_completion(prompt, **kwargs)
+        
+        # Log token usage from the response
+        self.log_usage(response)
+        
+        return response
     
     def _create_completion(self, prompt: str, **kwargs):
         """Create a completion using the DeepSeek API."""
@@ -217,10 +231,9 @@ class DeepSeekModel(dspy.LM):
         assert only_completed, "for now"
         assert return_sorted is False, "for now"
 
-        response = self._create_completion(prompt, **kwargs)
+        response = self.basic_request(prompt, **kwargs)
 
-        # Log the token usage from the DeepSeek API response.
-        self.log_usage(response)
+        # Token usage is already logged in basic_request
 
         choices = response["choices"]
         completions = [choice["message"]["content"] for choice in choices]
