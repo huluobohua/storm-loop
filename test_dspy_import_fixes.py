@@ -9,6 +9,183 @@ import importlib
 from unittest.mock import patch, MagicMock
 
 
+class TestDspyBehavioralCompatibility:
+    """
+    TDD-style behavioral tests to ensure shimmed classes work correctly
+    These tests verify that the compatibility layer doesn't just import,
+    but actually performs the expected behavior.
+    """
+    
+    def test_openai_model_generates_completion(self):
+        """Test that OpenAIModel can actually generate completions"""
+        try:
+            # Direct import approach
+            import sys
+            import importlib.util
+            
+            spec = importlib.util.spec_from_file_location(
+                "knowledge_storm.lm", 
+                "knowledge_storm/lm.py"
+            )
+            lm = importlib.util.module_from_spec(spec)
+            sys.modules["knowledge_storm.lm"] = lm
+            spec.loader.exec_module(lm)
+            
+            # Create a mock OpenAI model instance 
+            with patch('openai.OpenAI') as mock_openai:
+                mock_client = MagicMock()
+                mock_response = MagicMock()
+                mock_response.choices = [MagicMock(text="Test completion")]
+                mock_client.completions.create.return_value = mock_response
+                mock_openai.return_value = mock_client
+                
+                model = lm.OpenAIModel(model="gpt-3.5-turbo-instruct")
+                
+                # Test that it can generate a completion (use __call__ method)
+                result = model("Test prompt")
+                
+                assert result is not None
+                assert len(result) > 0
+                assert isinstance(result, list)
+                assert "Test completion" in result[0]
+                
+        except Exception as e:
+            pytest.fail(f"OpenAIModel behavioral test failed: {e}")
+    
+    def test_all_model_classes_inherit_correctly(self):
+        """Test that all model classes properly inherit from dspy.LM"""
+        try:
+            import sys
+            import importlib.util
+            
+            spec = importlib.util.spec_from_file_location(
+                "knowledge_storm.lm", 
+                "knowledge_storm/lm.py"
+            )
+            lm = importlib.util.module_from_spec(spec)
+            sys.modules["knowledge_storm.lm"] = lm
+            spec.loader.exec_module(lm)
+            
+            import dspy
+            
+            # Test all our custom model classes
+            model_classes = [
+                'OpenAIModel', 'TGIClient', 'TogetherClient', 
+                'OllamaClient', 'DeepSeekModel'
+            ]
+            
+            for class_name in model_classes:
+                if hasattr(lm, class_name):
+                    model_class = getattr(lm, class_name)
+                    assert issubclass(model_class, dspy.LM), f"{class_name} should inherit from dspy.LM"
+                    print(f"✓ {class_name} correctly inherits from dspy.LM")
+                
+        except Exception as e:
+            pytest.fail(f"Model inheritance test failed: {e}")
+    
+    def test_legacy_mock_is_no_longer_used_by_tgi_client(self):
+        """Verify that TGIClient no longer uses the legacy mock function"""
+        try:
+            import sys
+            import importlib.util
+            
+            spec = importlib.util.spec_from_file_location(
+                "knowledge_storm.lm", 
+                "knowledge_storm/lm.py"
+            )
+            lm = importlib.util.module_from_spec(spec)
+            sys.modules["knowledge_storm.lm"] = lm
+            spec.loader.exec_module(lm)
+            
+            # Verify that send_hftgi_request_v01_wrapped is no longer imported/used
+            import inspect
+            
+            tgi_source = inspect.getsource(lm.TGIClient)
+            
+            # Should not contain the legacy function call
+            assert "send_hftgi_request_v01_wrapped" not in tgi_source, \
+                "TGIClient should no longer use legacy send_hftgi_request_v01_wrapped"
+            
+            # Should contain reference to modern API
+            assert "HFClientTGI" in tgi_source, \
+                "TGIClient should use modern dspy.HFClientTGI"
+            
+            print("✓ TGIClient successfully migrated to modern dspy API")
+                
+        except Exception as e:
+            pytest.fail(f"Legacy mock verification test failed: {e}")
+    
+    def test_tgi_client_generates_completion_with_modern_api(self):
+        """Test that TGIClient works with modern dspy API instead of legacy mock"""
+        # RED: This should fail because current TGIClient uses legacy mock
+        try:
+            # Direct import approach to avoid module loading issues
+            import sys
+            import importlib.util
+            
+            # Load the module directly
+            spec = importlib.util.spec_from_file_location(
+                "knowledge_storm.lm", 
+                "knowledge_storm/lm.py"
+            )
+            lm = importlib.util.module_from_spec(spec)
+            sys.modules["knowledge_storm.lm"] = lm
+            spec.loader.exec_module(lm)
+            
+            # This should use modern dspy.HFClientTGI or equivalent, not legacy mock
+            with patch('dspy.HFClientTGI') as mock_hf_client:
+                mock_instance = MagicMock()
+                # Mock the __call__ method which is what our TGIClient delegates to
+                mock_instance.return_value = ["Test TGI completion"]  # When called as function
+                mock_instance.basic_request.return_value = {"choices": [{"text": "Test TGI completion"}]}
+                mock_hf_client.return_value = mock_instance
+                
+                # TGIClient should delegate to modern dspy API
+                model = lm.TGIClient(
+                    model="test-model",
+                    port=8080,
+                    url="http://localhost"
+                )
+                
+                # Test that it can generate a completion using modern API
+                result = model.generate("Test prompt")
+                
+                assert result is not None
+                assert len(result) > 0
+                assert isinstance(result, list)
+                
+                # Verify it's using modern API, not legacy mock
+                mock_hf_client.assert_called()
+                
+        except Exception as e:
+            pytest.fail(f"TGIClient modern API behavioral test failed: {e}")
+    
+    def test_tgi_client_mock_response_structure(self):
+        """Test that our current mock has proper structure but should be replaced"""
+        # This test documents current mock behavior but indicates it needs fixing
+        try:
+            from dspy_compatibility_shim import mock_send_hftgi_request_v01_wrapped
+            
+            # Test current mock response structure
+            response = mock_send_hftgi_request_v01_wrapped(
+                url="http://test",
+                json={"inputs": "test prompt"}
+            )
+            
+            # Should have .json() method
+            assert hasattr(response, 'json')
+            
+            json_data = response.json()
+            assert "generated_text" in json_data
+            assert "details" in json_data
+            
+            # But this is just a mock - real behavior should use modern dspy API
+            assert "Mock completion" in json_data["generated_text"]
+            
+        except Exception as e:
+            pytest.fail(f"Mock response structure test failed: {e}")
+
+
 class TestDspyImportCompatibility:
     """Test suite ensuring all dspy imports work without dependency errors"""
     
