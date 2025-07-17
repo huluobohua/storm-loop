@@ -33,6 +33,10 @@ class TokenTrackingLM(dspy.LM):
         self._token_usage_lock = threading.Lock()
         self.prompt_tokens = 0
         self.completion_tokens = 0
+    
+    def __call__(self, prompt: str, **kwargs):
+        """Abstract method - must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement __call__ method")
 
     def log_usage(self, response):
         """Log the total tokens from the API response."""
@@ -44,17 +48,17 @@ class TokenTrackingLM(dspy.LM):
 
     def get_usage_and_reset(self):
         """Get the total tokens used and reset the token usage."""
-        # Use the parent's model attribute directly
-        model_name = self.model
-        usage = {
-            model_name: {
-                "prompt_tokens": self.prompt_tokens,
-                "completion_tokens": self.completion_tokens,
+        with self._token_usage_lock:
+            model_name = self.kwargs.get('model', 'unknown')
+            usage = {
+                model_name: {
+                    "prompt_tokens": self.prompt_tokens,
+                    "completion_tokens": self.completion_tokens,
+                }
             }
-        }
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
-        return usage
+            self.prompt_tokens = 0
+            self.completion_tokens = 0
+            return usage
 
 
 class OpenAIModel(TokenTrackingLM):
@@ -183,7 +187,7 @@ class DeepSeekModel(TokenTrackingLM):
             "Authorization": f"Bearer {self.api_key}",
         }
         data = {
-            "model": self.model,
+            "model": self.kwargs.get("model", "deepseek-chat"),
             "messages": [{"role": "user", "content": prompt}],
             **kwargs,
         }
