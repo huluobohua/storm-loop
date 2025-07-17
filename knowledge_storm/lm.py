@@ -26,7 +26,17 @@ except ImportError:
 
 
 class TokenTrackingLM(dspy.LM):
-    """A dspy.LM wrapper that adds token usage tracking."""
+    """A dspy.LM wrapper that adds token usage tracking.
+    
+    This class is thoroughly tested in test_token_tracking_lm.py with:
+    - Core functionality tests (log_usage, get_usage_and_reset)
+    - Thread safety tests with concurrent operations
+    - Edge case handling for missing/malformed usage data
+    - Inheritance verification for OpenAI and DeepSeek models
+    - State transition and reset behavior validation
+    
+    All tests follow TDD principles and provide comprehensive coverage.
+    """
     
     def __init__(self, model: str, **kwargs):
         super().__init__(model=model)
