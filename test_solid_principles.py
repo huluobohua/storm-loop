@@ -20,8 +20,8 @@ class TestSOLIDPrinciples:
     def test_single_responsibility_principle(self):
         """Each class has a single, well-defined responsibility"""
         bias_check = BiasCheck()
-        detector = BiasDetector()
-        strategy = DefaultBiasDetectionStrategy()
+        strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
+        detector = BiasDetector(strategy=strategy)
         
         # BiasCheck: only validates data
         assert hasattr(bias_check, 'validate')
@@ -29,7 +29,7 @@ class TestSOLIDPrinciples:
         
         # BiasDetector: only detects bias using strategies
         assert hasattr(detector, 'detect_bias')
-        assert hasattr(detector, 'set_strategy')
+        assert not hasattr(detector, 'set_strategy')  # Pure DI - no setters
         
         # Strategy: only implements bias checking strategy
         assert hasattr(strategy, 'check_bias')
@@ -37,8 +37,9 @@ class TestSOLIDPrinciples:
     def test_open_closed_principle(self):
         """Classes are open for extension, closed for modification"""
         # Base strategy can be extended without modification
-        basic_strategy = DefaultBiasDetectionStrategy()
-        advanced_strategy = AdvancedBiasDetectionStrategy()
+        bias_check = BiasCheck()
+        basic_strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
+        advanced_strategy = AdvancedBiasDetectionStrategy(bias_check=bias_check)
         
         # Both implement the same interface
         test_data = {"test": "data"}
@@ -57,7 +58,6 @@ class TestSOLIDPrinciples:
     def test_liskov_substitution_principle(self):
         """Subtypes must be substitutable for their base types"""
         validator = BiasCheck()
-        detector = BiasDetector()
         
         # BiasCheck implements Validator interface
         assert isinstance(validator, Validator)
@@ -65,6 +65,7 @@ class TestSOLIDPrinciples:
         # Can substitute any Validator implementation
         custom_validator = BiasCheck()
         strategy = DefaultBiasDetectionStrategy(bias_check=custom_validator)
+        detector = BiasDetector(strategy=strategy)
         
         result = strategy.check_bias({"test": "data"})
         assert isinstance(result, ValidationResult)
@@ -72,27 +73,29 @@ class TestSOLIDPrinciples:
     def test_interface_segregation_principle(self):
         """No client forced to depend on methods it doesn't use"""
         # DefaultBiasDetectionStrategy only exposes bias checking methods
-        strategy = DefaultBiasDetectionStrategy()
+        bias_check = BiasCheck()
+        strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
         
-        # Strategy doesn't have unnecessary validation methods
+        # Strategy only implements IBiasDetectionStrategy interface
         assert hasattr(strategy, 'check_bias')
+        assert not hasattr(strategy, 'validate')  # No longer polluted with alias
         assert not hasattr(strategy, 'save_to_database')
         assert not hasattr(strategy, 'send_notification')
     
     def test_dependency_inversion_principle(self):
         """Depend on abstractions, not concretions"""
         # BiasDetector depends on strategy abstraction
-        detector = BiasDetector()
+        bias_check = BiasCheck()
         
         # Can inject any strategy implementation
-        basic_strategy = DefaultBiasDetectionStrategy()
-        advanced_strategy = AdvancedBiasDetectionStrategy()
+        basic_strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
+        advanced_strategy = AdvancedBiasDetectionStrategy(bias_check=bias_check)
         
-        detector.set_strategy(basic_strategy)
-        result1 = detector.detect_bias({"test": "data"})
+        detector1 = BiasDetector(strategy=basic_strategy)
+        result1 = detector1.detect_bias({"test": "data"})
         
-        detector.set_strategy(advanced_strategy)
-        result2 = detector.detect_bias({"test": "data"})
+        detector2 = BiasDetector(strategy=advanced_strategy)
+        result2 = detector2.detect_bias({"test": "data"})
         
         assert isinstance(result1, ValidationResult)
         assert isinstance(result2, ValidationResult)
@@ -137,8 +140,8 @@ class TestSandiMetzRules:
     def test_parameter_count_under_4(self):
         """Methods should have no more than 4 parameters"""
         bias_check = BiasCheck()
-        detector = BiasDetector()
-        strategy = DefaultBiasDetectionStrategy()
+        strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
+        detector = BiasDetector(strategy=strategy)
         
         # Check key methods have reasonable parameter counts
         import inspect
@@ -181,28 +184,38 @@ class TestFrameworkIntegration:
     """Test complete framework integration with SOLID principles"""
     
     def test_framework_strategy_injection(self):
-        """Framework should support strategy injection"""
-        advanced_strategy = AdvancedBiasDetectionStrategy()
-        framework = AcademicValidationFramework(strategy=advanced_strategy)
+        """Framework should support strategy injection via factory"""
+        from academic_validation_framework import AcademicValidationFrameworkFactory
+        
+        framework = AcademicValidationFrameworkFactory.create_advanced()
         
         # Framework uses injected strategy
         result = framework.validate_for_bias({})
         assert not result.is_valid
         assert "Empty data structures" in result.errors[0]
     
-    def test_framework_strategy_change(self):
-        """Framework should allow strategy changes at runtime"""
-        framework = AcademicValidationFramework()
+    def test_framework_pure_dependency_injection(self):
+        """Framework should work with pure dependency injection"""
+        from academic_validation_framework import (
+            BiasCheck, BiasDetector, DefaultBiasDetectionStrategy, 
+            AdvancedBiasDetectionStrategy, AcademicValidationFramework
+        )
         
         # Test with default strategy
-        result1 = framework.validate_for_bias({})
+        bias_check = BiasCheck()
+        default_strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
+        detector1 = BiasDetector(strategy=default_strategy)
+        framework1 = AcademicValidationFramework(bias_detector=detector1, bias_check=bias_check)
+        
+        result1 = framework1.validate_for_bias({})
         assert result1.is_valid  # Default allows empty dict
         
-        # Change to advanced strategy
-        advanced_strategy = AdvancedBiasDetectionStrategy()
-        framework.set_strategy(advanced_strategy)
+        # Test with advanced strategy
+        advanced_strategy = AdvancedBiasDetectionStrategy(bias_check=bias_check)
+        detector2 = BiasDetector(strategy=advanced_strategy)
+        framework2 = AcademicValidationFramework(bias_detector=detector2, bias_check=bias_check)
         
-        result2 = framework.validate_for_bias({})
+        result2 = framework2.validate_for_bias({})
         assert not result2.is_valid  # Advanced rejects empty dict
 
 

@@ -38,10 +38,6 @@ class DefaultBiasDetectionStrategy(IBiasDetectionStrategy):
             ValidationResult: Bias check result
         """
         return self.bias_check.validate(data)
-    
-    def validate(self, data: Any) -> ValidationResult:
-        """Alias for check_bias to support multiple interfaces"""
-        return self.check_bias(data)
 
 
 class AdvancedBiasDetectionStrategy(IBiasDetectionStrategy):

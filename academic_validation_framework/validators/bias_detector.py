@@ -28,19 +28,19 @@ class BiasDetector:
     Follows Single Responsibility and Dependency Inversion principles
     """
     
-    def __init__(self, strategy: Optional[IBiasDetectionStrategy] = None):
+    def __init__(self, strategy: IBiasDetectionStrategy):
         """
-        Initialize detector with optional strategy injection
+        Initialize detector with required strategy injection
+        Pure dependency injection - no optional dependencies
         
         Args:
-            strategy: Optional bias detection strategy implementing IBiasDetectionStrategy
+            strategy: Required bias detection strategy implementing IBiasDetectionStrategy
         """
         self.strategy = strategy
-        self._bias_check = BiasCheck()
     
     def detect_bias(self, data: Any) -> ValidationResult:
         """
-        Detect bias in data using injected strategy or default behavior
+        Detect bias in data using injected strategy
         
         Args:
             data: Data to analyze for bias
@@ -48,17 +48,4 @@ class BiasDetector:
         Returns:
             ValidationResult: Bias detection result
         """
-        if self.strategy:
-            return self.strategy.check_bias(data)
-        
-        # Default behavior using BiasCheck from models
-        return self._bias_check.validate(data)
-    
-    def set_strategy(self, strategy: IBiasDetectionStrategy) -> None:
-        """
-        Set detection strategy (Strategy Pattern)
-        
-        Args:
-            strategy: New strategy implementing IBiasDetectionStrategy
-        """
-        self.strategy = strategy
+        return self.strategy.check_bias(data)

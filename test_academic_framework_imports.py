@@ -59,11 +59,13 @@ class TestAcademicFrameworkImports:
         """
         try:
             from academic_validation_framework.validators.bias_detector import BiasDetector
+            from academic_validation_framework.validators.strategies.bias_detection_strategies import DefaultBiasDetectionStrategy
             from academic_validation_framework.models import BiasCheck
             
             # Should be able to create instances without import errors
-            detector = BiasDetector()
             bias_check = BiasCheck()
+            strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
+            detector = BiasDetector(strategy=strategy)
             
             assert detector is not None
             assert bias_check is not None
@@ -83,7 +85,7 @@ class TestAcademicFrameworkImports:
             bias_check = BiasCheck()
             
             # Should be able to inject dependency without import errors
-            assert hasattr(strategy, 'check_bias') or hasattr(strategy, 'validate')
+            assert hasattr(strategy, 'check_bias')
         except ImportError as e:
             pytest.fail(f"Strategy dependency injection not implemented: {e}")
     
@@ -94,8 +96,8 @@ class TestAcademicFrameworkImports:
         try:
             import academic_validation_framework
             
-            # Should be able to create main framework instance
-            framework = academic_validation_framework.AcademicValidationFramework()
+            # Should be able to create framework using factory
+            framework = academic_validation_framework.AcademicValidationFrameworkFactory.create_default()
             assert framework is not None
             
             # Basic validation should work
@@ -161,8 +163,10 @@ class TestDependencyInjectionPattern:
         """
         from academic_validation_framework.validators.bias_detector import BiasDetector
         from academic_validation_framework.validators.strategies.bias_detection_strategies import DefaultBiasDetectionStrategy
+        from academic_validation_framework.models import BiasCheck
         
-        strategy = DefaultBiasDetectionStrategy()
+        bias_check = BiasCheck()
+        strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
         detector = BiasDetector(strategy=strategy)
         
         assert detector is not None
