@@ -83,6 +83,80 @@ class TestDspyBehavioralCompatibility:
         except Exception as e:
             pytest.fail(f"OpenAIModel recursion test failed: {e}")
     
+    def test_deepseek_model_generates_completion(self):
+        """Test that DeepSeekModel can actually generate completions"""
+        try:
+            import knowledge_storm.lm as lm
+            
+            # Mock the requests.post call for DeepSeek API
+            with patch('requests.post') as mock_post:
+                mock_response = MagicMock()
+                mock_response.json.return_value = {
+                    "choices": [{"message": {"content": "DeepSeek test response"}}],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 8}
+                }
+                mock_response.raise_for_status.return_value = None
+                mock_post.return_value = mock_response
+                
+                model = lm.DeepSeekModel(model="deepseek-chat", api_key="test_key")
+                
+                # Test that it can generate a completion
+                result = model("Test prompt")
+                
+                assert result is not None
+                assert len(result) > 0
+                assert isinstance(result, list)
+                assert "DeepSeek test response" in result[0]
+                
+                # Verify token tracking works
+                assert model.prompt_tokens == 12
+                assert model.completion_tokens == 8
+                
+                # Verify API was called correctly
+                mock_post.assert_called_once()
+                call_args = mock_post.call_args
+                assert call_args[0][0] == "https://api.deepseek.com/v1/chat/completions"
+                assert call_args[1]["headers"]["Authorization"] == "Bearer test_key"
+                assert call_args[1]["json"]["model"] == "deepseek-chat"
+                assert call_args[1]["json"]["messages"][0]["content"] == "Test prompt"
+                
+        except Exception as e:
+            pytest.fail(f"DeepSeekModel behavioral test failed: {e}")
+    
+    def test_deepseek_model_implements_abstract_methods(self):
+        """Test that DeepSeekModel properly implements dspy.LM abstract methods"""
+        try:
+            import knowledge_storm.lm as lm
+            import dspy
+            
+            # Check that all abstract methods are implemented
+            abstract_methods = [method for method in dir(dspy.LM) if hasattr(getattr(dspy.LM, method), '__isabstractmethod__')]
+            implemented_methods = [method for method in abstract_methods if hasattr(lm.DeepSeekModel, method)]
+            
+            assert set(abstract_methods) == set(implemented_methods), \
+                f"Missing abstract methods: {set(abstract_methods) - set(implemented_methods)}"
+            
+            # Test that basic_request works independently
+            with patch('requests.post') as mock_post:
+                mock_response = MagicMock()
+                mock_response.json.return_value = {
+                    "choices": [{"message": {"content": "Basic request test"}}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 3}
+                }
+                mock_response.raise_for_status.return_value = None
+                mock_post.return_value = mock_response
+                
+                model = lm.DeepSeekModel(model="deepseek-chat", api_key="test_key")
+                result = model.basic_request("Test prompt")
+                
+                assert result is not None
+                assert result["choices"][0]["message"]["content"] == "Basic request test"
+                assert model.prompt_tokens == 5
+                assert model.completion_tokens == 3
+                
+        except Exception as e:
+            pytest.fail(f"DeepSeekModel abstract method test failed: {e}")
+    
     def test_all_model_classes_inherit_correctly(self):
         """Test that all model classes properly inherit from dspy.LM"""
         try:
