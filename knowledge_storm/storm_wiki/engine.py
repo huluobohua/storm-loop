@@ -74,16 +74,16 @@ class STORMWikiLMConfigs(LMConfigs):
                 "No valid OpenAI API provider is provided. Cannot use default LLM configurations."
             )
 
-    def set_conv_simulator_lm(self, model: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def set_conv_simulator_lm(self, model: Union[dspy.LM, dspy.HFModel]):
         self.conv_simulator_lm = model
 
-    def set_question_asker_lm(self, model: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def set_question_asker_lm(self, model: Union[dspy.LM, dspy.HFModel]):
         self.question_asker_lm = model
 
-    def set_outline_gen_lm(self, model: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def set_outline_gen_lm(self, model: Union[dspy.LM, dspy.HFModel]):
         self.outline_gen_lm = model
 
-    def set_article_gen_lm(self, model: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def set_article_gen_lm(self, model: Union[dspy.LM, dspy.HFModel]):
         self.article_gen_lm = model
 
     def set_article_polish_lm(self, model: Union[dspy.LM, dspy.HFModel]):

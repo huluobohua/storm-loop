@@ -158,7 +158,7 @@ class EnhancedOutlineRefinement(dspy.Signature):
 class EnhancedWriteOutline(dspy.Module):
     """Enhanced outline generation with validation and iterative refinement."""
     
-    def __init__(self, engine: Union[dspy.dsp.LM, dspy.dsp.HFModel], max_refinements: int = 2):
+    def __init__(self, engine: Union[dspy.LM, dspy.HFModel], max_refinements: int = 2):
         super().__init__()
         self.draft_page_outline = dspy.Predict(EnhancedWritePageOutline)
         self.write_page_outline = dspy.Predict(EnhancedWritePageOutlineFromConv)
@@ -250,7 +250,7 @@ class EnhancedStormOutlineGenerationModule(OutlineGenerationModule):
     Enhanced outline generation module with better prompting, validation, and refinement.
     """
     
-    def __init__(self, outline_gen_lm: Union[dspy.dsp.LM, dspy.dsp.HFModel]):
+    def __init__(self, outline_gen_lm: Union[dspy.LM, dspy.HFModel]):
         super().__init__()
         self.outline_gen_lm = outline_gen_lm
         self.write_outline = EnhancedWriteOutline(engine=self.outline_gen_lm)
