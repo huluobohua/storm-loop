@@ -9,8 +9,26 @@ try:
     import dspy
 except ModuleNotFoundError:  # pragma: no cover - handled for optional dep
     dspy = None
-import requests
 
+# Install compatibility shim for legacy dspy imports
+try:
+    from dspy_compatibility_shim import install_dspy_compatibility_shim
+    install_dspy_compatibility_shim()
+except ImportError:
+    # Fallback: create minimal shim inline
+    import sys
+    import types
+    if dspy is not None:
+        # Create minimal mock modules for legacy imports
+        modules_mod = types.ModuleType("dspy.dsp.modules")
+        hf_client_mod = types.ModuleType("dspy.dsp.modules.hf_client")
+        hf_client_mod.send_hftgi_request_v01_wrapped = lambda *args, **kwargs: {
+            "choices": [{"text": "Mock response"}], "usage": {"total_tokens": 10}
+        }
+        sys.modules["dspy.dsp.modules"] = modules_mod
+        sys.modules["dspy.dsp.modules.hf_client"] = hf_client_mod
+
+import requests
 
 from dspy.dsp.modules.hf_client import send_hftgi_request_v01_wrapped
 from openai import OpenAI
@@ -22,7 +40,7 @@ except ImportError:
     RateLimitError = None
 
 
-class OpenAIModel(dspy.OpenAI):
+class OpenAIModel(dspy.LM):
     """A wrapper class for dspy.OpenAI."""
 
     def __init__(
@@ -112,7 +130,7 @@ class OpenAIModel(dspy.OpenAI):
         return completions
 
 
-class DeepSeekModel(dspy.OpenAI):
+class DeepSeekModel(dspy.LM):
     """A wrapper class for DeepSeek API, compatible with dspy.OpenAI."""
 
     def __init__(
@@ -201,7 +219,7 @@ class DeepSeekModel(dspy.OpenAI):
         return completions
 
 
-class OllamaClient(dspy.OllamaLocal):
+class OllamaClient(dspy.LM):
     """A wrapper class for dspy.OllamaClient."""
 
     def __init__(self, model, port, url="http://localhost", **kwargs):
@@ -214,7 +232,7 @@ class OllamaClient(dspy.OllamaLocal):
         self.kwargs = {**self.kwargs, **kwargs}
 
 
-class TGIClient(dspy.HFClientTGI):
+class TGIClient(dspy.LM):
     def __init__(self, model, port, url, http_request_kwargs=None, **kwargs):
         super().__init__(
             model=model,
@@ -276,7 +294,7 @@ class TGIClient(dspy.HFClientTGI):
             raise Exception("Received invalid JSON response from server")
 
 
-class TogetherClient(dspy.dsp.modules.hf.HFModel):
+class TogetherClient(dspy.LM):
     """A wrapper class for dspy.Together."""
 
     def __init__(

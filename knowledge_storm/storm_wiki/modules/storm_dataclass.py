@@ -8,7 +8,7 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from ...interface import Information, InformationTable, Article, ArticleSectionNode
-from ...utils import ArticleTextProcessing, FileIOHelper
+from ..utils import ArticleTextProcessing, FileIOHelper
 
 
 class StormInformation(Information):

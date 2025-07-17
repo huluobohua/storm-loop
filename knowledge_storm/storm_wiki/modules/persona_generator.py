@@ -2,6 +2,41 @@ import logging
 import re
 from typing import Union, List
 
+# Install compatibility shim for legacy dspy imports
+try:
+    from dspy_compatibility_shim import install_dspy_compatibility_shim
+    install_dspy_compatibility_shim()
+except ImportError:
+    # Fallback: create minimal shim inline
+    import sys
+    import types
+    try:
+        import dspy
+        if dspy is not None:
+            # Create minimal mock modules for legacy imports
+            modules_mod = types.ModuleType("dspy.dsp.modules")
+            lm_mod = types.ModuleType("dspy.dsp.modules.lm")
+            hf_mod = types.ModuleType("dspy.dsp.modules.hf")
+            
+            # Map to modern dspy classes
+            lm_mod.LM = dspy.LM
+            hf_mod.HFModel = dspy.LM
+            
+            # Also add direct dspy.dsp.LM and dspy.dsp.HFModel aliases
+            dsp_mod = getattr(dspy, 'dsp', None)
+            if dsp_mod is None:
+                dsp_mod = types.ModuleType("dspy.dsp")
+                dspy.dsp = dsp_mod
+            
+            dsp_mod.LM = dspy.LM
+            dsp_mod.HFModel = dspy.LM
+            
+            sys.modules["dspy.dsp.modules"] = modules_mod
+            sys.modules["dspy.dsp.modules.lm"] = lm_mod
+            sys.modules["dspy.dsp.modules.hf"] = hf_mod
+    except ImportError:
+        pass
+
 from dspy.dsp.modules.lm import LM
 from dspy.dsp.modules.hf import HFModel
 
