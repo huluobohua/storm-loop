@@ -51,10 +51,8 @@ class BiasCheck(Validator):
         """Validate data for bias with comprehensive error handling"""
         if data is None:
             return self._handle_none_data()
-        
         if not self._is_supported_type(data):
             return self._handle_unsupported_type(data)
-        
         return ValidationResult(is_valid=True)
     
     def _handle_none_data(self) -> ValidationResult:
@@ -75,33 +73,23 @@ class BiasCheck(Validator):
     @property
     def is_valid(self) -> bool:
         """
-        Compatibility property for existing interface
+        Deprecated property - raises NotImplementedError
         
-        WARNING: This property is deprecated and always returns True.
-        Use the validate() method instead for accurate validation results.
+        This property has been removed. Use the validate() method instead.
         """
-        import warnings
-        warnings.warn(
-            "BiasCheck.is_valid property is deprecated and always returns True. "
-            "Use BiasCheck.validate(data).is_valid for accurate validation results.",
-            DeprecationWarning,
-            stacklevel=2
+        raise NotImplementedError(
+            "BiasCheck.is_valid property has been deprecated. "
+            "Use BiasCheck.validate(data).is_valid for accurate validation results."
         )
-        return True  # For backwards compatibility
     
     @property 
     def errors(self) -> List[str]:
         """
-        Compatibility property for existing interface
+        Deprecated property - raises NotImplementedError
         
-        WARNING: This property is deprecated and always returns empty list.
-        Use the validate() method instead for accurate error information.
+        This property has been removed. Use the validate() method instead.
         """
-        import warnings
-        warnings.warn(
-            "BiasCheck.errors property is deprecated and always returns []. "
-            "Use BiasCheck.validate(data).errors for accurate error information.",
-            DeprecationWarning,
-            stacklevel=2
+        raise NotImplementedError(
+            "BiasCheck.errors property has been deprecated. "
+            "Use BiasCheck.validate(data).errors for accurate error information."
         )
-        return []  # For backwards compatibility

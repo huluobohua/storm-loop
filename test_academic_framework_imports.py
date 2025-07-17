@@ -119,9 +119,22 @@ class TestBiasCheckModel:
         assert hasattr(bias_check, 'validate')
         assert callable(bias_check.validate)
         
-        # Must have result properties
-        assert hasattr(bias_check, 'is_valid')
-        assert hasattr(bias_check, 'errors')
+        # Deprecated properties should exist as class properties but raise NotImplementedError when accessed
+        assert 'is_valid' in dir(bias_check.__class__)
+        assert 'errors' in dir(bias_check.__class__)
+        
+        # Verify they raise NotImplementedError for safety
+        try:
+            _ = bias_check.is_valid
+            assert False, "is_valid should raise NotImplementedError"
+        except NotImplementedError:
+            pass  # Expected behavior
+            
+        try:
+            _ = bias_check.errors
+            assert False, "errors should raise NotImplementedError"
+        except NotImplementedError:
+            pass  # Expected behavior
     
     def test_bias_check_validation_behavior(self):
         """

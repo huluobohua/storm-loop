@@ -125,12 +125,14 @@ class TestSandiMetzRules:
         validate_method = getattr(bias_check, 'validate')
         source_lines = inspect.getsourcelines(validate_method)[0]
         
-        # Count only non-docstring, non-whitespace lines
+        # Count only non-docstring, non-whitespace, non-signature lines
         code_lines = [line.strip() for line in source_lines 
-                     if line.strip() and not line.strip().startswith('"""')]
+                     if line.strip() 
+                     and not line.strip().startswith('"""')
+                     and not line.strip().startswith('def ')]
         
-        # Validate method has reasonable complexity
-        assert len(code_lines) <= 10, f"validate method has {len(code_lines)} code lines"
+        # Validate method body should follow Sandi Metz 5-line rule
+        assert len(code_lines) <= 5, f"validate method has {len(code_lines)} body lines (max 5)"
     
     def test_parameter_count_under_4(self):
         """Methods should have no more than 4 parameters"""
