@@ -76,7 +76,7 @@ class TestDspyBehavioralCompatibility:
                 # Verify the call was made to the internal client, not recursively
                 mock_client.basic_request.assert_called_once_with("test prompt")
                 
-                print("✓ OpenAIModel.basic_request works without recursion")
+                # Test passed - no need to print
                 
         except RecursionError:
             pytest.fail("OpenAIModel.basic_request caused RecursionError - migration failed")
@@ -196,7 +196,7 @@ class TestDspyBehavioralCompatibility:
             assert "HFClientTGI" in tgi_source, \
                 "TGIClient should use modern dspy.HFClientTGI"
             
-            print("✓ TGIClient successfully migrated to modern dspy API")
+            # Test passed - no need to print
                 
         except Exception as e:
             pytest.fail(f"Legacy mock verification test failed: {e}")
@@ -249,7 +249,7 @@ class TestDspyBehavioralCompatibility:
             except ImportError:
                 pass  # Expected behavior
                 
-            print("✓ Compatibility shim completely removed")
+            # Test passed - no need to print
             
         except Exception as e:
             pytest.fail(f"Compatibility shim removal test failed: {e}")
@@ -322,7 +322,7 @@ class TestDspyImportCompatibility:
             generator = pg.StormPersonaGenerator(mock_engine)
             assert generator is not None
             
-            print("✓ persona_generator successfully migrated to modern dspy API")
+            # Test passed - no need to print
             
         except Exception as e:
             pytest.fail(f"persona_generator modern API test failed: {e}")
