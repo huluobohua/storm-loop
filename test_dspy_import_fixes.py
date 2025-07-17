@@ -22,13 +22,16 @@ class TestDspyBehavioralCompatibility:
             # Clean standard import approach  
             import knowledge_storm.lm as lm
             
-            # Create a mock OpenAI model instance 
-            with patch('openai.OpenAI') as mock_openai:
+            # Mock the internal dspy.OpenAI client
+            with patch('dspy.OpenAI') as mock_dspy_openai:
+                # Create a mock dspy.OpenAI instance
                 mock_client = MagicMock()
-                mock_response = MagicMock()
-                mock_response.choices = [MagicMock(text="Test completion")]
-                mock_client.completions.create.return_value = mock_response
-                mock_openai.return_value = mock_client
+                mock_client.basic_request.return_value = {
+                    "choices": [{"text": "Test completion", "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5}
+                }
+                mock_client.model_type = "text"
+                mock_dspy_openai.return_value = mock_client
                 
                 model = lm.OpenAIModel(model="gpt-3.5-turbo-instruct")
                 
@@ -40,8 +43,45 @@ class TestDspyBehavioralCompatibility:
                 assert isinstance(result, list)
                 assert "Test completion" in result[0]
                 
+                # Verify token tracking works
+                assert model.prompt_tokens == 10
+                assert model.completion_tokens == 5
+                
         except Exception as e:
             pytest.fail(f"OpenAIModel behavioral test failed: {e}")
+    
+    def test_openai_model_no_recursion_error(self):
+        """Test that OpenAIModel basic_request doesn't cause recursion error"""
+        try:
+            import knowledge_storm.lm as lm
+            
+            # Mock the internal dspy.OpenAI client
+            with patch('dspy.OpenAI') as mock_dspy_openai:
+                mock_client = MagicMock()
+                mock_client.basic_request.return_value = {
+                    "choices": [{"text": "No recursion", "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 3}
+                }
+                mock_client.model_type = "text"
+                mock_dspy_openai.return_value = mock_client
+                
+                model = lm.OpenAIModel(model="gpt-3.5-turbo-instruct")
+                
+                # This should not cause RecursionError
+                result = model.basic_request("test prompt")
+                
+                assert result is not None
+                assert result["choices"][0]["text"] == "No recursion"
+                
+                # Verify the call was made to the internal client, not recursively
+                mock_client.basic_request.assert_called_once_with("test prompt")
+                
+                print("✓ OpenAIModel.basic_request works without recursion")
+                
+        except RecursionError:
+            pytest.fail("OpenAIModel.basic_request caused RecursionError - migration failed")
+        except Exception as e:
+            pytest.fail(f"OpenAIModel recursion test failed: {e}")
     
     def test_all_model_classes_inherit_correctly(self):
         """Test that all model classes properly inherit from dspy.LM"""
