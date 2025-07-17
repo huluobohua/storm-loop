@@ -109,7 +109,18 @@ def install_dspy_compatibility_shim():
     """
     Install compatibility shim for legacy dspy.dsp.modules imports
     Creates mock modules that map to modern dspy functionality
+    
+    WARNING: This is a TEMPORARY compatibility layer. 
+    Please migrate to modern dspy API as outlined in MIGRATION_PLAN.md
+    This shim will be removed in future versions.
     """
+    import warnings
+    warnings.warn(
+        "dspy_compatibility_shim is temporary. Please migrate to modern dspy API. "
+        "See MIGRATION_PLAN.md for migration guide.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     
     # Create mock module structure
     modules_mod = types.ModuleType("dspy.dsp.modules")

@@ -19,17 +19,8 @@ class TestDspyBehavioralCompatibility:
     def test_openai_model_generates_completion(self):
         """Test that OpenAIModel can actually generate completions"""
         try:
-            # Direct import approach
-            import sys
-            import importlib.util
-            
-            spec = importlib.util.spec_from_file_location(
-                "knowledge_storm.lm", 
-                "knowledge_storm/lm.py"
-            )
-            lm = importlib.util.module_from_spec(spec)
-            sys.modules["knowledge_storm.lm"] = lm
-            spec.loader.exec_module(lm)
+            # Clean standard import approach  
+            import knowledge_storm.lm as lm
             
             # Create a mock OpenAI model instance 
             with patch('openai.OpenAI') as mock_openai:
@@ -55,17 +46,8 @@ class TestDspyBehavioralCompatibility:
     def test_all_model_classes_inherit_correctly(self):
         """Test that all model classes properly inherit from dspy.LM"""
         try:
-            import sys
-            import importlib.util
-            
-            spec = importlib.util.spec_from_file_location(
-                "knowledge_storm.lm", 
-                "knowledge_storm/lm.py"
-            )
-            lm = importlib.util.module_from_spec(spec)
-            sys.modules["knowledge_storm.lm"] = lm
-            spec.loader.exec_module(lm)
-            
+            # Clean standard import approach
+            import knowledge_storm.lm as lm
             import dspy
             
             # Test all our custom model classes
@@ -86,18 +68,8 @@ class TestDspyBehavioralCompatibility:
     def test_legacy_mock_is_no_longer_used_by_tgi_client(self):
         """Verify that TGIClient no longer uses the legacy mock function"""
         try:
-            import sys
-            import importlib.util
-            
-            spec = importlib.util.spec_from_file_location(
-                "knowledge_storm.lm", 
-                "knowledge_storm/lm.py"
-            )
-            lm = importlib.util.module_from_spec(spec)
-            sys.modules["knowledge_storm.lm"] = lm
-            spec.loader.exec_module(lm)
-            
-            # Verify that send_hftgi_request_v01_wrapped is no longer imported/used
+            # Clean standard import approach
+            import knowledge_storm.lm as lm
             import inspect
             
             tgi_source = inspect.getsource(lm.TGIClient)
@@ -117,20 +89,9 @@ class TestDspyBehavioralCompatibility:
     
     def test_tgi_client_generates_completion_with_modern_api(self):
         """Test that TGIClient works with modern dspy API instead of legacy mock"""
-        # RED: This should fail because current TGIClient uses legacy mock
         try:
-            # Direct import approach to avoid module loading issues
-            import sys
-            import importlib.util
-            
-            # Load the module directly
-            spec = importlib.util.spec_from_file_location(
-                "knowledge_storm.lm", 
-                "knowledge_storm/lm.py"
-            )
-            lm = importlib.util.module_from_spec(spec)
-            sys.modules["knowledge_storm.lm"] = lm
-            spec.loader.exec_module(lm)
+            # Clean standard import approach
+            import knowledge_storm.lm as lm
             
             # This should use modern dspy.HFClientTGI or equivalent, not legacy mock
             with patch('dspy.HFClientTGI') as mock_hf_client:
