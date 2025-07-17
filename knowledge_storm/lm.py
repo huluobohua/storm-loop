@@ -10,9 +10,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - handled for optional dep
     dspy = None
 
-# Install compatibility shim for legacy dspy imports
-from dspy_compatibility_shim import install_dspy_compatibility_shim
-install_dspy_compatibility_shim()
+# Compatibility shim no longer needed - all modules use modern dspy API
 
 import requests
 

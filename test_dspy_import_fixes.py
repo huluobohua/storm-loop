@@ -235,30 +235,24 @@ class TestDspyBehavioralCompatibility:
         except Exception as e:
             pytest.fail(f"TGIClient modern API behavioral test failed: {e}")
     
-    def test_tgi_client_mock_response_structure(self):
-        """Test that our current mock has proper structure but should be replaced"""
-        # This test documents current mock behavior but indicates it needs fixing
+    def test_no_compatibility_shim_references(self):
+        """Test that compatibility shim has been completely removed"""
         try:
-            from dspy_compatibility_shim import mock_send_hftgi_request_v01_wrapped
+            # Check that the shim file no longer exists
+            import os
+            assert not os.path.exists("dspy_compatibility_shim.py"), "Compatibility shim file should be removed"
             
-            # Test current mock response structure
-            response = mock_send_hftgi_request_v01_wrapped(
-                url="http://test",
-                json={"inputs": "test prompt"}
-            )
-            
-            # Should have .json() method
-            assert hasattr(response, 'json')
-            
-            json_data = response.json()
-            assert "generated_text" in json_data
-            assert "details" in json_data
-            
-            # But this is just a mock - real behavior should use modern dspy API
-            assert "Mock completion" in json_data["generated_text"]
+            # Test that trying to import the shim raises ImportError
+            try:
+                import dspy_compatibility_shim
+                pytest.fail("dspy_compatibility_shim should not be importable")
+            except ImportError:
+                pass  # Expected behavior
+                
+            print("✓ Compatibility shim completely removed")
             
         except Exception as e:
-            pytest.fail(f"Mock response structure test failed: {e}")
+            pytest.fail(f"Compatibility shim removal test failed: {e}")
 
 
 class TestDspyImportCompatibility:
@@ -311,6 +305,7 @@ class TestDspyImportCompatibility:
             assert "dspy.dsp.LM" not in source_code, "Should not use legacy dspy.dsp.LM"
             assert "dspy.dsp.HFModel" not in source_code, "Should not use legacy dspy.dsp.HFModel"
             assert "install_dspy_compatibility_shim" not in source_code, "Should not use compatibility shim"
+            assert "dspy_compatibility_shim" not in source_code, "Should not import compatibility shim"
             
             # Should contain modern dspy imports
             assert "import dspy" in source_code, "Should use modern dspy import"

@@ -23,7 +23,7 @@ class StormArticleGenerationModule(ArticleGenerationModule):
 
     def __init__(
         self,
-        article_gen_lm=Union[dspy.dsp.LM, dspy.dsp.HFModel],
+        article_gen_lm=Union[dspy.LM, dspy.HFModel],
         retrieve_top_k: int = 5,
         max_thread_num: int = 10,
     ):
@@ -146,7 +146,7 @@ class ConvToSection(dspy.Module):
 
     def __init__(
         self,
-        engine: Union[dspy.dsp.LM, dspy.dsp.HFModel],
+        engine: Union[dspy.LM, dspy.HFModel],
         section_verifier: SectionCitationVerifier,
     ):
         super().__init__()
