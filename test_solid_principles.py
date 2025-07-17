@@ -9,7 +9,7 @@ from academic_validation_framework.models import (
 )
 from academic_validation_framework.validators.bias_detector import BiasDetector
 from academic_validation_framework.validators.strategies.bias_detection_strategies import (
-    BiasDetectionStrategy, AdvancedBiasDetectionStrategy
+    DefaultBiasDetectionStrategy, AdvancedBiasDetectionStrategy
 )
 from academic_validation_framework import AcademicValidationFramework
 
@@ -21,7 +21,7 @@ class TestSOLIDPrinciples:
         """Each class has a single, well-defined responsibility"""
         bias_check = BiasCheck()
         detector = BiasDetector()
-        strategy = BiasDetectionStrategy()
+        strategy = DefaultBiasDetectionStrategy()
         
         # BiasCheck: only validates data
         assert hasattr(bias_check, 'validate')
@@ -37,7 +37,7 @@ class TestSOLIDPrinciples:
     def test_open_closed_principle(self):
         """Classes are open for extension, closed for modification"""
         # Base strategy can be extended without modification
-        basic_strategy = BiasDetectionStrategy()
+        basic_strategy = DefaultBiasDetectionStrategy()
         advanced_strategy = AdvancedBiasDetectionStrategy()
         
         # Both implement the same interface
@@ -64,15 +64,15 @@ class TestSOLIDPrinciples:
         
         # Can substitute any Validator implementation
         custom_validator = BiasCheck()
-        strategy = BiasDetectionStrategy(bias_check=custom_validator)
+        strategy = DefaultBiasDetectionStrategy(bias_check=custom_validator)
         
         result = strategy.check_bias({"test": "data"})
         assert isinstance(result, ValidationResult)
     
     def test_interface_segregation_principle(self):
         """No client forced to depend on methods it doesn't use"""
-        # BiasDetectionStrategy only exposes bias checking methods
-        strategy = BiasDetectionStrategy()
+        # DefaultBiasDetectionStrategy only exposes bias checking methods
+        strategy = DefaultBiasDetectionStrategy()
         
         # Strategy doesn't have unnecessary validation methods
         assert hasattr(strategy, 'check_bias')
@@ -85,7 +85,7 @@ class TestSOLIDPrinciples:
         detector = BiasDetector()
         
         # Can inject any strategy implementation
-        basic_strategy = BiasDetectionStrategy()
+        basic_strategy = DefaultBiasDetectionStrategy()
         advanced_strategy = AdvancedBiasDetectionStrategy()
         
         detector.set_strategy(basic_strategy)
@@ -107,7 +107,7 @@ class TestSandiMetzRules:
         
         classes_to_check = [
             BiasCheck, ValidationResult, BiasDetector, 
-            BiasDetectionStrategy, AdvancedBiasDetectionStrategy
+            DefaultBiasDetectionStrategy, AdvancedBiasDetectionStrategy
         ]
         
         for cls in classes_to_check:
@@ -136,7 +136,7 @@ class TestSandiMetzRules:
         """Methods should have no more than 4 parameters"""
         bias_check = BiasCheck()
         detector = BiasDetector()
-        strategy = BiasDetectionStrategy()
+        strategy = DefaultBiasDetectionStrategy()
         
         # Check key methods have reasonable parameter counts
         import inspect

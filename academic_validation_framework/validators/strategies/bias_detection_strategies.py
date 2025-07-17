@@ -2,18 +2,20 @@
 Bias detection strategies using dependency injection
 No longer imports BiasCheck directly to avoid circular dependencies
 Follows SOLID principles and Sandi Metz rules
+Clear naming distinguishes interfaces from concrete implementations
 """
 
 from typing import Any
 from ...models import BiasCheck, ValidationResult, Validator
-from ..bias_detector import BiasDetectionStrategy as BaseStrategy
+from ..bias_detector import IBiasDetectionStrategy
 
 
-class BiasDetectionStrategy(BaseStrategy):
+class DefaultBiasDetectionStrategy(IBiasDetectionStrategy):
     """
-    Concrete strategy for bias detection using dependency injection
+    Default concrete strategy for bias detection using dependency injection
     Accepts BiasCheck as injected dependency instead of importing directly
     Follows Single Responsibility and Dependency Inversion principles
+    Clear naming indicates this is the default implementation
     """
     
     def __init__(self, bias_check: Validator = None):
@@ -42,10 +44,11 @@ class BiasDetectionStrategy(BaseStrategy):
         return self.check_bias(data)
 
 
-class AdvancedBiasDetectionStrategy(BaseStrategy):
+class AdvancedBiasDetectionStrategy(IBiasDetectionStrategy):
     """
     Advanced strategy with additional bias detection logic
     Demonstrates Open/Closed Principle - extending without modifying
+    Clear naming indicates this is an advanced implementation
     """
     
     def __init__(self, bias_check: Validator = None):
@@ -67,3 +70,7 @@ class AdvancedBiasDetectionStrategy(BaseStrategy):
             )
         
         return ValidationResult(is_valid=True)
+
+
+# Legacy alias for backward compatibility - will be deprecated
+BiasDetectionStrategy = DefaultBiasDetectionStrategy

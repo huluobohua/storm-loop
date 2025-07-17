@@ -75,11 +75,11 @@ class TestAcademicFrameworkImports:
         Test that strategies use dependency injection instead of direct imports
         """
         try:
-            from academic_validation_framework.validators.strategies.bias_detection_strategies import BiasDetectionStrategy
+            from academic_validation_framework.validators.strategies.bias_detection_strategies import DefaultBiasDetectionStrategy
             from academic_validation_framework.models import BiasCheck
             
             # Strategy should accept BiasCheck as dependency
-            strategy = BiasDetectionStrategy()
+            strategy = DefaultBiasDetectionStrategy()
             bias_check = BiasCheck()
             
             # Should be able to inject dependency without import errors
@@ -147,9 +147,9 @@ class TestDependencyInjectionPattern:
         Test BiasDetector uses dependency injection for strategies
         """
         from academic_validation_framework.validators.bias_detector import BiasDetector
-        from academic_validation_framework.validators.strategies.bias_detection_strategies import BiasDetectionStrategy
+        from academic_validation_framework.validators.strategies.bias_detection_strategies import DefaultBiasDetectionStrategy
         
-        strategy = BiasDetectionStrategy()
+        strategy = DefaultBiasDetectionStrategy()
         detector = BiasDetector(strategy=strategy)
         
         assert detector is not None
@@ -159,11 +159,11 @@ class TestDependencyInjectionPattern:
         """
         Test strategies accept BiasCheck as injected dependency
         """
-        from academic_validation_framework.validators.strategies.bias_detection_strategies import BiasDetectionStrategy
+        from academic_validation_framework.validators.strategies.bias_detection_strategies import DefaultBiasDetectionStrategy
         from academic_validation_framework.models import BiasCheck
         
         bias_check = BiasCheck()
-        strategy = BiasDetectionStrategy(bias_check=bias_check)
+        strategy = DefaultBiasDetectionStrategy(bias_check=bias_check)
         
         assert strategy is not None
         assert strategy.bias_check is bias_check

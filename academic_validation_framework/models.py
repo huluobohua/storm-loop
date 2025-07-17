@@ -74,10 +74,34 @@ class BiasCheck(Validator):
     
     @property
     def is_valid(self) -> bool:
-        """Compatibility property for existing interface"""
+        """
+        Compatibility property for existing interface
+        
+        WARNING: This property is deprecated and always returns True.
+        Use the validate() method instead for accurate validation results.
+        """
+        import warnings
+        warnings.warn(
+            "BiasCheck.is_valid property is deprecated and always returns True. "
+            "Use BiasCheck.validate(data).is_valid for accurate validation results.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return True  # For backwards compatibility
     
     @property 
     def errors(self) -> List[str]:
-        """Compatibility property for existing interface"""
+        """
+        Compatibility property for existing interface
+        
+        WARNING: This property is deprecated and always returns empty list.
+        Use the validate() method instead for accurate error information.
+        """
+        import warnings
+        warnings.warn(
+            "BiasCheck.errors property is deprecated and always returns []. "
+            "Use BiasCheck.validate(data).errors for accurate error information.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return []  # For backwards compatibility

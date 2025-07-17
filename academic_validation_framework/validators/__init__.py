@@ -2,6 +2,6 @@
 Validators package for academic validation framework
 """
 
-from .bias_detector import BiasDetector
+from .bias_detector import BiasDetector, IBiasDetectionStrategy
 
-__all__ = ["BiasDetector"]
+__all__ = ["BiasDetector", "IBiasDetectionStrategy"]

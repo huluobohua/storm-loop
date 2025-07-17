@@ -4,16 +4,21 @@ BiasCheck moved to models.py to break circular dependency
 Follows SOLID principles and Sandi Metz rules
 """
 
+from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 from ..models import BiasCheck, ValidationResult
 
 
-class BiasDetectionStrategy:
-    """Interface for bias detection strategies (Interface Segregation)"""
+class IBiasDetectionStrategy(ABC):
+    """
+    Interface for bias detection strategies (Interface Segregation)
+    Clear naming distinguishes this as an interface/protocol
+    """
     
+    @abstractmethod
     def check_bias(self, data: Any) -> ValidationResult:
         """Check data for bias"""
-        raise NotImplementedError
+        pass
 
 
 class BiasDetector:
@@ -23,12 +28,12 @@ class BiasDetector:
     Follows Single Responsibility and Dependency Inversion principles
     """
     
-    def __init__(self, strategy: Optional[BiasDetectionStrategy] = None):
+    def __init__(self, strategy: Optional[IBiasDetectionStrategy] = None):
         """
         Initialize detector with optional strategy injection
         
         Args:
-            strategy: Optional bias detection strategy
+            strategy: Optional bias detection strategy implementing IBiasDetectionStrategy
         """
         self.strategy = strategy
         self._bias_check = BiasCheck()
@@ -49,11 +54,11 @@ class BiasDetector:
         # Default behavior using BiasCheck from models
         return self._bias_check.validate(data)
     
-    def set_strategy(self, strategy: BiasDetectionStrategy) -> None:
+    def set_strategy(self, strategy: IBiasDetectionStrategy) -> None:
         """
         Set detection strategy (Strategy Pattern)
         
         Args:
-            strategy: New strategy to use
+            strategy: New strategy implementing IBiasDetectionStrategy
         """
         self.strategy = strategy
