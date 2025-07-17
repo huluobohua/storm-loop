@@ -161,8 +161,5 @@ def uninstall_dspy_compatibility_shim():
     logging.info("dspy compatibility shim uninstalled")
 
 
-# Auto-install shim when module is imported
-if dspy is not None:
-    install_dspy_compatibility_shim()
-else:
-    logging.warning("dspy not available, compatibility shim not installed")
+# Note: Shim is installed explicitly in modules that need it
+# This avoids auto-installation side effects and makes the behavior more explicit
