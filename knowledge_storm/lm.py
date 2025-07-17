@@ -28,7 +28,7 @@ except ImportError:
 
 
 class OpenAIModel(dspy.LM):
-    """A wrapper class for dspy.OpenAI."""
+    """A wrapper class for dspy.OpenAI with enhanced token usage tracking."""
 
     def __init__(
         self,
@@ -37,15 +37,25 @@ class OpenAIModel(dspy.LM):
         model_type: Literal["chat", "text"] = None,
         **kwargs,
     ):
-        # Store OpenAI-specific parameters separately from dspy.LM
-        self.api_key = api_key
-        self.model_type = model_type
+        # Initialize parent with model parameter
+        super().__init__(model=model)
         
-        # Initialize parent with only supported parameters
-        super().__init__(model=model, **kwargs)
+        # Create internal dspy.OpenAI instance for delegation
+        self._openai_client = dspy.OpenAI(
+            model=model,
+            api_key=api_key,
+            model_type=model_type,
+            **kwargs
+        )
+        
+        # Token usage tracking
         self._token_usage_lock = threading.Lock()
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        
+        # Store parameters for backward compatibility
+        self.api_key = api_key
+        self.model_type = model_type
 
     def log_usage(self, response):
         """Log the total tokens from the OpenAI API response."""
@@ -57,9 +67,9 @@ class OpenAIModel(dspy.LM):
 
     def get_usage_and_reset(self):
         """Get the total tokens used and reset the token usage."""
+        model_name = self._openai_client.kwargs.get("model") or self.kwargs.get("model")
         usage = {
-            self.kwargs.get("model")
-            or self.kwargs.get("engine"): {
+            model_name: {
                 "prompt_tokens": self.prompt_tokens,
                 "completion_tokens": self.completion_tokens,
             }
@@ -70,8 +80,19 @@ class OpenAIModel(dspy.LM):
         return usage
 
     def basic_request(self, prompt: str, **kwargs):
-        """Core request method that delegates to the request method"""
-        return self.request(prompt, **kwargs)
+        """Core request method that delegates to the internal OpenAI client"""
+        response = self._openai_client.basic_request(prompt, **kwargs)
+        
+        # Log token usage from the response
+        self.log_usage(response)
+        
+        return response
+
+    def _get_choice_text(self, choice: dict[str, Any]) -> str:
+        """Extract text from a choice response based on model type"""
+        if self._openai_client.model_type == "chat":
+            return choice["message"]["content"]
+        return choice["text"]
 
     def __call__(
         self,
@@ -91,10 +112,9 @@ class OpenAIModel(dspy.LM):
         #     else:
         #         kwargs = {**kwargs, "logprobs": 5}
 
-        response = self.request(prompt, **kwargs)
+        response = self.basic_request(prompt, **kwargs)
 
-        # Log the token usage from the OpenAI API response.
-        self.log_usage(response)
+        # Token usage is already logged in basic_request
 
         choices = response["choices"]
 
