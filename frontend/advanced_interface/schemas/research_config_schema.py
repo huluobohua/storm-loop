@@ -4,7 +4,7 @@ Pydantic schemas for validating research and session configuration
 """
 
 from typing import Dict, List, Optional, Any, Union
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from enum import Enum
 
 
@@ -152,11 +152,11 @@ class ResearchConfigSchema(BaseModel):
         
         return self
     
-    class Config:
-        """Pydantic configuration"""
-        use_enum_values = True
-        validate_assignment = True
-        extra = "forbid"  # Reject unknown fields
+    model_config = ConfigDict(
+        use_enum_values=True,
+        validate_assignment=True,
+        extra="forbid"  # Reject unknown fields
+    )
 
 
 class SessionConfigSchema(BaseModel):
@@ -248,7 +248,7 @@ class SessionConfigSchema(BaseModel):
             raise ValueError(f"Priority must be one of: {valid_priorities}")
         return v.lower()
     
-    class Config:
-        """Pydantic configuration"""
-        validate_assignment = True
-        extra = "forbid"  # Reject unknown fields
+    model_config = ConfigDict(
+        validate_assignment=True,
+        extra="forbid"  # Reject unknown fields
+    )
