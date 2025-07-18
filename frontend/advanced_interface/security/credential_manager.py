@@ -8,8 +8,15 @@ import json
 import hashlib
 import secrets
 from typing import Dict, Optional, Any, List
-import base64
 import threading
+
+# Production-grade encryption
+try:
+    from cryptography.fernet import Fernet
+    CRYPTOGRAPHY_AVAILABLE = True
+except ImportError:
+    import base64
+    CRYPTOGRAPHY_AVAILABLE = False
 
 
 class CredentialManager:
@@ -20,38 +27,68 @@ class CredentialManager:
     
     def __init__(self, master_key: Optional[str] = None):
         self._credentials = {}
-        self._master_key = master_key or self._generate_master_key()
+        self._master_key = master_key or self._get_or_generate_key()
         self._lock = threading.RLock()
+        self._fernet = self._init_encryption()
     
-    def _generate_master_key(self) -> str:
-        """Generate a secure master key"""
-        return secrets.token_urlsafe(32)
+    def _get_or_generate_key(self) -> str:
+        """Get key from environment or generate new one"""
+        if CRYPTOGRAPHY_AVAILABLE:
+            # Production: Use environment variable or secure key management
+            env_key = os.environ.get('STORM_ENCRYPTION_KEY')
+            if env_key:
+                return env_key
+            # Generate new key for development
+            return Fernet.generate_key().decode()
+        else:
+            # Fallback for development without cryptography
+            return secrets.token_urlsafe(32)
     
-    def _simple_encrypt(self, data: str) -> str:
-        """Simple encryption using base64 (for demo purposes)
-        
-        PRODUCTION WARNING: This is a demo implementation using base64 encoding.
-        For production use, replace with proper encryption like:
-        - cryptography.fernet.Fernet
-        - AES-256-GCM encryption
-        - AWS KMS or similar key management service
-        """
-        # TODO: Replace with proper encryption before production deployment
-        return base64.b64encode(data.encode()).decode()
+    def _init_encryption(self):
+        """Initialize encryption engine"""
+        if CRYPTOGRAPHY_AVAILABLE:
+            # Ensure key is properly formatted for Fernet
+            if isinstance(self._master_key, str):
+                key_bytes = self._master_key.encode()
+                # Pad or truncate to 32 bytes, then base64 encode
+                if len(key_bytes) < 32:
+                    key_bytes = key_bytes.ljust(32, b'\0')
+                elif len(key_bytes) > 32:
+                    key_bytes = key_bytes[:32]
+                # Create Fernet-compatible key
+                import base64
+                fernet_key = base64.urlsafe_b64encode(key_bytes)
+                return Fernet(fernet_key)
+            else:
+                return Fernet(self._master_key)
+        return None
     
-    def _simple_decrypt(self, encrypted_data: str) -> str:
-        """Simple decryption using base64 (for demo purposes)
-        
-        PRODUCTION WARNING: This is a demo implementation using base64 decoding.
-        For production use, replace with proper decryption matching the encryption method.
-        """
-        # TODO: Replace with proper decryption before production deployment
-        return base64.b64decode(encrypted_data.encode()).decode()
+    def _encrypt(self, data: str) -> str:
+        """Encrypt data using production-grade encryption"""
+        if CRYPTOGRAPHY_AVAILABLE and self._fernet:
+            # Production: Use Fernet symmetric encryption
+            return self._fernet.encrypt(data.encode()).decode()
+        else:
+            # Development fallback: Clear warning about security
+            print("WARNING: Using development-only base64 encoding - NOT SECURE for production!")
+            import base64
+            return base64.b64encode(data.encode()).decode()
+    
+    def _decrypt(self, encrypted_data: str) -> str:
+        """Decrypt data using production-grade decryption"""
+        if CRYPTOGRAPHY_AVAILABLE and self._fernet:
+            # Production: Use Fernet symmetric decryption
+            return self._fernet.decrypt(encrypted_data.encode()).decode()
+        else:
+            # Development fallback: Clear warning about security
+            print("WARNING: Using development-only base64 decoding - NOT SECURE for production!")
+            import base64
+            return base64.b64decode(encrypted_data.encode()).decode()
     
     def store_credential(self, service: str, username: str, credential: str) -> None:
         """Store encrypted credential"""
         with self._lock:
-            encrypted_credential = self._simple_encrypt(credential)
+            encrypted_credential = self._encrypt(credential)
             self._credentials[service] = {
                 "username": username,
                 "credential": encrypted_credential,
@@ -66,7 +103,7 @@ class CredentialManager:
             
             stored = self._credentials[service]
             try:
-                decrypted = self._simple_decrypt(stored["credential"])
+                decrypted = self._decrypt(stored["credential"])
                 return {
                     "username": stored["username"],
                     "credential": decrypted,
@@ -142,35 +179,57 @@ class SecureAuthenticationManager:
     def authenticate_database(self, database: str, credentials: Dict[str, str]) -> Dict[str, Any]:
         """Authenticate with database using secure credentials"""
         with self._lock:
-            # Validate input
-            if not self._validate_database_name(database):
-                raise ValueError(f"Invalid database name: {database}")
-            
-            username = credentials.get("username", "")
-            password = credentials.get("password", "")
-            
-            if not self._validate_credentials(username, password):
-                return {
-                    "authenticated": False,
-                    "error": "Invalid credentials format"
-                }
-            
-            # Store credentials securely
-            self._credential_manager.store_credential(database, username, password)
-            
-            # Generate session token
-            session_token = secrets.token_urlsafe(32)
-            self._session_tokens[database] = {
-                "token": session_token,
-                "username": username,
-                "authenticated": True
-            }
-            
-            return {
-                "authenticated": True,
-                "session_token": session_token,
-                "username": username
-            }
+            self._validate_database_input(database)
+            username, password = self._extract_credentials(credentials)
+            return self._process_authentication(database, username, password)
+    
+    def _validate_database_input(self, database: str) -> None:
+        """Validate database name input"""
+        if not self._validate_database_name(database):
+            raise ValueError(f"Invalid database name: {database}")
+    
+    def _extract_credentials(self, credentials: Dict[str, str]) -> tuple:
+        """Extract username and password from credentials"""
+        username = credentials.get("username", "")
+        password = credentials.get("password", "")
+        return username, password
+    
+    def _process_authentication(self, database: str, username: str, password: str) -> Dict[str, Any]:
+        """Process authentication with validated inputs"""
+        if not self._validate_credentials(username, password):
+            return self._create_failure_response()
+        return self._create_success_response(database, username, password)
+    
+    def _create_failure_response(self) -> Dict[str, Any]:
+        """Create authentication failure response"""
+        return {
+            "authenticated": False,
+            "error": "Invalid credentials format"
+        }
+    
+    def _create_success_response(self, database: str, username: str, password: str) -> Dict[str, Any]:
+        """Create authentication success response"""
+        self._credential_manager.store_credential(database, username, password)
+        session_token = self._generate_session_token(database, username)
+        return self._build_success_result(session_token, username)
+    
+    def _generate_session_token(self, database: str, username: str) -> str:
+        """Generate and store session token"""
+        session_token = secrets.token_urlsafe(32)
+        self._session_tokens[database] = {
+            "token": session_token,
+            "username": username,
+            "authenticated": True
+        }
+        return session_token
+    
+    def _build_success_result(self, session_token: str, username: str) -> Dict[str, Any]:
+        """Build final success response"""
+        return {
+            "authenticated": True,
+            "session_token": session_token,
+            "username": username
+        }
     
     def get_authentication_status(self, database: str) -> Dict[str, Any]:
         """Get authentication status for database"""

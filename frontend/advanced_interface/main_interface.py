@@ -44,27 +44,51 @@ class AdvancedAcademicInterface:
     
     async def configure_research(self, config: Dict[str, Any]) -> None:
         """Configure research settings"""
+        self._configure_research_type(config)
+        self._configure_storm_mode(config)
+        self._configure_agents_and_databases(config)
+        self._configure_quality_settings(config)
+    
+    def _configure_research_type(self, config: Dict[str, Any]) -> None:
+        """Configure research type"""
         research_type = config.get("research_type")
         if research_type:
             self.research_config.select_research_type(research_type)
-        
+    
+    def _configure_storm_mode(self, config: Dict[str, Any]) -> None:
+        """Configure STORM mode"""
         storm_mode = config.get("storm_mode")
         if storm_mode:
             self.research_config.set_storm_mode(storm_mode)
-        
+    
+    def _configure_agents_and_databases(self, config: Dict[str, Any]) -> None:
+        """Configure agents and databases"""
+        self._configure_agents(config)
+        self._configure_databases(config)
+    
+    def _configure_agents(self, config: Dict[str, Any]) -> None:
+        """Configure agents"""
         agents = config.get("agents")
         if agents:
             self.research_config.select_agents(agents)
-        
+    
+    def _configure_databases(self, config: Dict[str, Any]) -> None:
+        """Configure databases"""
         databases = config.get("databases")
         if databases:
             self.research_config.select_databases(databases)
-        
+    
+    def _configure_quality_settings(self, config: Dict[str, Any]) -> None:
+        """Configure quality settings"""
         quality_settings = config.get("quality_settings")
         if quality_settings:
-            bias_detection = quality_settings.get("bias_detection")
-            if bias_detection:
-                self.research_config.set_bias_detection_level(bias_detection)
+            self._apply_bias_detection_settings(quality_settings)
+    
+    def _apply_bias_detection_settings(self, quality_settings: Dict[str, Any]) -> None:
+        """Apply bias detection settings"""
+        bias_detection = quality_settings.get("bias_detection")
+        if bias_detection:
+            self.research_config.set_bias_detection_level(bias_detection)
     
     async def start_research(self, query: str) -> str:
         """Start research process"""
@@ -106,23 +130,27 @@ class AdvancedAcademicInterface:
     def create_research_session(self, user_id: str, session_name: str) -> str:
         """Create new research session"""
         session_id = str(uuid.uuid4())
-        
         with self._lock:
-            self._research_sessions[session_id] = {
-                "user_id": user_id,
-                "session_name": session_name,
-                "created_at": datetime.now(),
-                "active": True
-            }
-            
-            # Initialize session config
-            self._session_configs[session_id] = {
-                "storm_mode": "hybrid",
-                "agents": ["academic_researcher"],
-                "databases": ["openalex"]
-            }
-        
+            self._create_session_data(session_id, user_id, session_name)
+            self._initialize_session_config(session_id)
         return session_id
+    
+    def _create_session_data(self, session_id: str, user_id: str, session_name: str) -> None:
+        """Create session data"""
+        self._research_sessions[session_id] = {
+            "user_id": user_id,
+            "session_name": session_name,
+            "created_at": datetime.now(),
+            "active": True
+        }
+    
+    def _initialize_session_config(self, session_id: str) -> None:
+        """Initialize session configuration"""
+        self._session_configs[session_id] = {
+            "storm_mode": "hybrid",
+            "agents": ["academic_researcher"],
+            "databases": ["openalex"]
+        }
     
     def configure_session(self, session_id: str, config: Dict[str, Any]) -> None:
         """Configure research session"""

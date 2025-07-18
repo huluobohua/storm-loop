@@ -7,14 +7,18 @@ Following Single Responsibility Principle and Sandi Metz rules
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-import sys
-import os
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from knowledge_storm.storm_config import STORMConfig
-from knowledge_storm.config_validators import STORMMode
+# Import from knowledge_storm package directly
+try:
+    from knowledge_storm.storm_config import STORMConfig
+    from knowledge_storm.config_validators import STORMMode
+except ImportError:
+    # Fallback for development environments
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from knowledge_storm.storm_config import STORMConfig
+    from knowledge_storm.config_validators import STORMMode
 
 
 @dataclass

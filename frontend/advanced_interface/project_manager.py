@@ -49,13 +49,14 @@ class ProjectManager:
     Adheres to Single Responsibility Principle - only manages projects
     """
     
-    def __init__(self):
+    def __init__(self, user_context: Optional[str] = None):
         self._projects = {}
         self._project_users = {}
         self._user_permissions = {}
         self._versions = {}
         self._current_versions = {}
         self._lock = threading.RLock()
+        self._user_context = user_context or "anonymous_user"
     
     def create_project(self, project_data: Dict[str, Any]) -> str:
         """Create new research project"""
@@ -70,11 +71,11 @@ class ProjectManager:
                 start_date=project_data.get("start_date", ""),
                 end_date=project_data.get("end_date", ""),
                 created_at=datetime.now(),
-                owner="current_user"  # Simplified for testing
+                owner=self._user_context
             )
             
             # Create initial version
-            version_id = self._create_version(project_id, "Initial version", "current_user")
+            version_id = self._create_version(project_id, "Initial version", self._user_context)
             self._current_versions[project_id] = version_id
         
         return project_id
@@ -148,7 +149,7 @@ class ProjectManager:
     def create_version(self, project_id: str, description: str) -> str:
         """Create project version"""
         with self._lock:
-            return self._create_version(project_id, description, "current_user")
+            return self._create_version(project_id, description, self._user_context)
     
     def compare_versions(self, project_id: str, version1: str, version2: str) -> Dict[str, Any]:
         """Compare two project versions"""

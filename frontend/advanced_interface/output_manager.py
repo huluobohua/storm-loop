@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 import threading
+from datetime import datetime
 
 
 class OutputFormat(Enum):
@@ -105,10 +106,10 @@ class OutputManager:
         
         # Simple APA style preview implementation
         if style == "apa":
-            authors = ", ".join(paper_data.get("authors", []))
-            title = paper_data.get("title", "")
-            year = paper_data.get("year", "")
-            journal = paper_data.get("journal", "")
+            authors = ", ".join(paper_data.get("authors", [])) or "Unknown"
+            title = paper_data.get("title", "Unknown")
+            year = paper_data.get("year", "Unknown")
+            journal = paper_data.get("journal", "Unknown")
             
             return f"{authors} ({year}). {title}. {journal}."
         
@@ -161,7 +162,7 @@ class OutputManager:
             self._quality_reports[report_type] = QualityReport(
                 report_type=report_type,
                 data=data,
-                generated_at=str(datetime.now()) if 'datetime' in globals() else "2024-01-01"
+                generated_at=str(datetime.now())
             )
     
     def get_quality_report(self, report_type: str) -> Dict[str, Any]:

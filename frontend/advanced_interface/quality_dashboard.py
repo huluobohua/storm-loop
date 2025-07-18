@@ -85,6 +85,10 @@ class QualityDashboard:
             
             metrics = self._citation_metrics
             
+            # If no citations, return 0
+            if metrics.total_citations == 0:
+                return 0.0
+            
             # Calculate verification rate
             verification_rate = (metrics.verified_citations / metrics.total_citations 
                                if metrics.total_citations > 0 else 0)
@@ -94,7 +98,7 @@ class QualityDashboard:
                            if metrics.total_citations > 0 else 0)
             
             # Age factor (newer is better, but not too new)
-            age_factor = max(0, 1 - (metrics.average_citation_age - 2) / 10)
+            age_factor = max(0, 1 - (metrics.average_citation_age - 2) / 10) if metrics.average_citation_age > 0 else 0
             
             # Combined score
             quality_score = (verification_rate * 0.4 + quality_rate * 0.4 + age_factor * 0.2)

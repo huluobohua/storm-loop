@@ -341,11 +341,19 @@ class TestSecurityAndValidation:
         
         db_manager = DatabaseManager()
         
-        # Test with empty credentials
-        db_manager.authenticate_database("institutional", {})
+        # Test with empty credentials - should raise ValueError
+        try:
+            db_manager.authenticate_database("institutional", {})
+            assert False, "Expected ValueError for empty credentials"
+        except ValueError as e:
+            assert "Invalid credentials format" in str(e)
         
-        # Test with partial credentials
-        db_manager.authenticate_database("institutional", {"username": "test"})
+        # Test with partial credentials - should raise ValueError
+        try:
+            db_manager.authenticate_database("institutional", {"username": "test"})
+            assert False, "Expected ValueError for partial credentials"
+        except ValueError as e:
+            assert "Invalid credentials format" in str(e)
         
         # Should handle gracefully without crashing
         status = db_manager.get_authentication_status("institutional")

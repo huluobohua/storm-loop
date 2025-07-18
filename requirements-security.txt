@@ -1,0 +1,2 @@
+# Security dependencies for production-grade encryption
+cryptography>=41.0.0
