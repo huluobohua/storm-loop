@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 import threading
 import uuid
+from .security import SecureAuthenticationManager
 
 
 class DatabaseType(Enum):
@@ -73,7 +74,7 @@ class DatabaseManager:
     
     def __init__(self):
         self.selected_database = None
-        self._auth_status = {}
+        self._auth_manager = SecureAuthenticationManager()
         self._papers = {}
         self._collections = {}
         self._paper_annotations = {}
@@ -92,28 +93,19 @@ class DatabaseManager:
             self.selected_database = database
     
     def authenticate_database(self, database: str, credentials: Dict[str, str]) -> None:
-        """Authenticate with database"""
+        """Authenticate with database using secure credential manager"""
         if database not in self.get_available_databases():
             raise ValueError(f"Invalid database: {database}")
         
-        with self._lock:
-            self._auth_status[database] = AuthenticationStatus(
-                authenticated=True,
-                username=credentials.get("username"),
-                institution=credentials.get("institution")
-            )
+        # Use secure authentication manager
+        auth_result = self._auth_manager.authenticate_database(database, credentials)
+        
+        if not auth_result["authenticated"]:
+            raise ValueError(f"Authentication failed: {auth_result.get('error', 'Invalid credentials')}")
     
     def get_authentication_status(self, database: str) -> Dict[str, Any]:
         """Get authentication status"""
-        with self._lock:
-            status = self._auth_status.get(database)
-            if status:
-                return {
-                    "authenticated": status.authenticated,
-                    "username": status.username,
-                    "institution": status.institution
-                }
-            return {"authenticated": False}
+        return self._auth_manager.get_authentication_status(database)
     
     def get_query_builder(self) -> QueryBuilder:
         """Get query builder instance"""
