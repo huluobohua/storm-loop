@@ -10,6 +10,7 @@ from enum import Enum
 import threading
 import uuid
 from datetime import datetime
+from .project_version_manager import ProjectVersionManager
 
 
 class UserRole(Enum):
@@ -32,15 +33,6 @@ class Project:
     owner: str
 
 
-@dataclass
-class ProjectVersion:
-    """Value object for project version"""
-    id: str
-    project_id: str
-    version_number: int
-    description: str
-    created_at: datetime
-    created_by: str
 
 
 class ProjectManager:
@@ -49,14 +41,14 @@ class ProjectManager:
     Adheres to Single Responsibility Principle - only manages projects
     """
     
-    def __init__(self, user_context: Optional[str] = None):
+    def __init__(self, user_context: Optional[str] = None, 
+                 version_manager: Optional[ProjectVersionManager] = None):
         self._projects = {}
         self._project_users = {}
         self._user_permissions = {}
-        self._versions = {}
-        self._current_versions = {}
         self._lock = threading.RLock()
         self._user_context = user_context or "anonymous_user"
+        self._version_manager = version_manager or ProjectVersionManager()
     
     def create_project(self, project_data: Dict[str, Any]) -> str:
         """Create new research project"""
@@ -75,8 +67,7 @@ class ProjectManager:
             )
             
             # Create initial version
-            version_id = self._create_version(project_id, "Initial version", self._user_context)
-            self._current_versions[project_id] = version_id
+            self._version_manager.create_version(project_id, "Initial version", self._user_context)
         
         return project_id
     
@@ -127,59 +118,18 @@ class ProjectManager:
         with self._lock:
             return self._user_permissions.get(f"{project_id}:{user_email}", [])
     
-    def _create_version(self, project_id: str, description: str, created_by: str) -> str:
-        """Create new version"""
-        version_id = str(uuid.uuid4())
-        
-        # Get next version number
-        project_versions = [v for v in self._versions.values() if v.project_id == project_id]
-        version_number = len(project_versions) + 1
-        
-        self._versions[version_id] = ProjectVersion(
-            id=version_id,
-            project_id=project_id,
-            version_number=version_number,
-            description=description,
-            created_at=datetime.now(),
-            created_by=created_by
-        )
-        
-        return version_id
-    
     def create_version(self, project_id: str, description: str) -> str:
         """Create project version"""
-        with self._lock:
-            return self._create_version(project_id, description, self._user_context)
+        return self._version_manager.create_version(project_id, description, self._user_context)
     
     def compare_versions(self, project_id: str, version1: str, version2: str) -> Dict[str, Any]:
         """Compare two project versions"""
-        with self._lock:
-            v1 = self._versions.get(version1)
-            v2 = self._versions.get(version2)
-            
-            if v1 and v2:
-                return {
-                    "version1": {
-                        "id": v1.id,
-                        "description": v1.description,
-                        "created_at": v1.created_at
-                    },
-                    "version2": {
-                        "id": v2.id,
-                        "description": v2.description,
-                        "created_at": v2.created_at
-                    },
-                    "differences": ["Content differences would be shown here"]
-                }
-            return {}
+        return self._version_manager.compare_versions(project_id, version1, version2)
     
     def rollback_to_version(self, project_id: str, version_id: str) -> None:
         """Rollback project to specific version"""
-        with self._lock:
-            if version_id in self._versions:
-                self._current_versions[project_id] = version_id
+        self._version_manager.rollback_to_version(project_id, version_id)
     
     def get_current_version(self, project_id: str) -> str:
         """Get current version ID"""
-        with self._lock:
-            return self._current_versions.get(project_id, "")
+        return self._version_manager.get_current_version(project_id)

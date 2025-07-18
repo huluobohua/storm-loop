@@ -10,13 +10,17 @@ import secrets
 from typing import Dict, Optional, Any, List
 import threading
 
-# Production-grade encryption
+# Production-grade encryption - REQUIRED for production
 try:
     from cryptography.fernet import Fernet
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
-    import base64
     CRYPTOGRAPHY_AVAILABLE = False
+    # Production deployment MUST have cryptography installed
+    raise ImportError(
+        "cryptography library is required for production. "
+        "Install with: pip install cryptography"
+    )
 
 
 class CredentialManager:
@@ -32,58 +36,51 @@ class CredentialManager:
         self._fernet = self._init_encryption()
     
     def _get_or_generate_key(self) -> str:
-        """Get key from environment or generate new one"""
-        if CRYPTOGRAPHY_AVAILABLE:
-            # Production: Use environment variable or secure key management
-            env_key = os.environ.get('STORM_ENCRYPTION_KEY')
-            if env_key:
-                return env_key
-            # Generate new key for development
-            return Fernet.generate_key().decode()
-        else:
-            # Fallback for development without cryptography
-            return secrets.token_urlsafe(32)
+        """Get key from environment or secure key management service"""
+        # Production: MUST use environment variable for security
+        env_key = os.environ.get('STORM_ENCRYPTION_KEY')
+        if env_key:
+            return env_key
+        
+        # Check for development environment
+        if os.environ.get('ENVIRONMENT') == 'development':
+            # Generate new key for development only
+            key = Fernet.generate_key().decode()
+            print(f"WARNING: Generated development key. Set STORM_ENCRYPTION_KEY: {key}")
+            return key
+        
+        # Production MUST have encryption key set
+        raise ValueError(
+            "STORM_ENCRYPTION_KEY environment variable is required for production. "
+            "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+        )
     
     def _init_encryption(self):
-        """Initialize encryption engine"""
-        if CRYPTOGRAPHY_AVAILABLE:
-            # Ensure key is properly formatted for Fernet
+        """Initialize encryption engine with proper Fernet key"""
+        # Validate that the key is Fernet-compatible
+        try:
             if isinstance(self._master_key, str):
+                # If key is string, it should be base64-encoded Fernet key
                 key_bytes = self._master_key.encode()
-                # Pad or truncate to 32 bytes, then base64 encode
-                if len(key_bytes) < 32:
-                    key_bytes = key_bytes.ljust(32, b'\0')
-                elif len(key_bytes) > 32:
-                    key_bytes = key_bytes[:32]
-                # Create Fernet-compatible key
-                import base64
-                fernet_key = base64.urlsafe_b64encode(key_bytes)
-                return Fernet(fernet_key)
+                return Fernet(key_bytes)
             else:
                 return Fernet(self._master_key)
-        return None
+        except Exception as e:
+            raise ValueError(f"Invalid encryption key format: {e}. Use Fernet.generate_key().decode()")
     
     def _encrypt(self, data: str) -> str:
-        """Encrypt data using production-grade encryption"""
-        if CRYPTOGRAPHY_AVAILABLE and self._fernet:
-            # Production: Use Fernet symmetric encryption
+        """Encrypt data using production-grade Fernet encryption"""
+        try:
             return self._fernet.encrypt(data.encode()).decode()
-        else:
-            # Development fallback: Clear warning about security
-            print("WARNING: Using development-only base64 encoding - NOT SECURE for production!")
-            import base64
-            return base64.b64encode(data.encode()).decode()
+        except Exception as e:
+            raise RuntimeError(f"Encryption failed: {e}")
     
     def _decrypt(self, encrypted_data: str) -> str:
-        """Decrypt data using production-grade decryption"""
-        if CRYPTOGRAPHY_AVAILABLE and self._fernet:
-            # Production: Use Fernet symmetric decryption
+        """Decrypt data using production-grade Fernet decryption"""
+        try:
             return self._fernet.decrypt(encrypted_data.encode()).decode()
-        else:
-            # Development fallback: Clear warning about security
-            print("WARNING: Using development-only base64 decoding - NOT SECURE for production!")
-            import base64
-            return base64.b64decode(encrypted_data.encode()).decode()
+        except Exception as e:
+            raise RuntimeError(f"Decryption failed: {e}. Data may be corrupted or key invalid.")
     
     def store_credential(self, service: str, username: str, credential: str) -> None:
         """Store encrypted credential"""

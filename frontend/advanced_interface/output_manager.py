@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 import threading
 from datetime import datetime
+from .citation import CitationFactory
 
 
 class OutputFormat(Enum):
@@ -88,8 +89,8 @@ class OutputManager:
             return self._format_configs.get(format_name, {})
     
     def get_citation_styles(self) -> List[str]:
-        """Get available citation styles"""
-        return [style.value for style in CitationStyle]
+        """Get available citation styles using Strategy pattern"""
+        return CitationFactory.get_available_styles()
     
     def set_citation_style(self, style: str) -> None:
         """Set citation style"""
@@ -100,21 +101,26 @@ class OutputManager:
             self.citation_style = style
     
     def preview_citation_style(self, style: str, paper_data: Dict[str, Any]) -> str:
-        """Preview citation in specified style"""
-        if style not in self.get_citation_styles():
-            raise ValueError(f"Invalid citation style: {style}")
+        """
+        Preview citation in specified style using Strategy pattern
         
-        # Simple APA style preview implementation
-        if style == "apa":
-            authors = ", ".join(paper_data.get("authors", [])) or "Unknown"
-            title = paper_data.get("title", "Unknown")
-            year = paper_data.get("year", "Unknown")
-            journal = paper_data.get("journal", "Unknown")
+        Args:
+            style: Citation style name
+            paper_data: Paper information dictionary
             
-            return f"{authors} ({year}). {title}. {journal}."
-        
-        # Default format for other styles
-        return f"Citation in {style} style: {paper_data.get('title', 'Unknown')}"
+        Returns:
+            Formatted citation string
+            
+        Raises:
+            ValueError: If citation style is not supported
+        """
+        try:
+            # Use Strategy pattern to format citation
+            formatter = CitationFactory.create_formatter(style)
+            return formatter.format_citation(paper_data)
+        except ValueError as e:
+            # Re-raise with more context if needed
+            raise ValueError(f"Citation formatting error: {e}")
     
     def get_available_sections(self) -> List[str]:
         """Get available document sections"""

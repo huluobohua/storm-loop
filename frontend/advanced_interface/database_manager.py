@@ -10,6 +10,7 @@ from enum import Enum
 import threading
 import uuid
 from .security import SecureAuthenticationManager
+from .database import DatabaseClientFactory, AbstractDatabaseClient
 
 
 class DatabaseType(Enum):
@@ -78,6 +79,7 @@ class DatabaseManager:
         self._papers = {}
         self._collections = {}
         self._paper_annotations = {}
+        self._database_clients = {}  # Cache for database client instances
         self._lock = threading.RLock()
     
     def get_available_databases(self) -> List[str]:
@@ -155,14 +157,74 @@ class DatabaseManager:
         with self._lock:
             return self._paper_annotations.get(paper_id, "")
     
-    def search_papers(self, query: str, database: str = None) -> List[Dict[str, Any]]:
-        """Search papers in database"""
-        # Mock implementation for testing
-        return [
-            {
-                "title": f"Sample Paper for {query}",
-                "authors": ["Author 1", "Author 2"],
-                "year": 2024,
-                "doi": "10.1000/sample"
-            }
-        ]
+    def search_papers(self, query: str, database: str = None, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Search papers in specified database using concrete client implementations
+        
+        Args:
+            query: Search query string
+            database: Database to search (uses selected_database if None)
+            **kwargs: Additional search parameters
+            
+        Returns:
+            List of normalized paper dictionaries
+            
+        Raises:
+            ValueError: If no database selected or database invalid
+            RuntimeError: If database client not authenticated
+        """
+        target_database = database or self.selected_database
+        if not target_database:
+            raise ValueError("No database selected for search")
+        
+        if target_database not in self.get_available_databases():
+            raise ValueError(f"Invalid database: {target_database}")
+        
+        with self._lock:
+            # Get or create database client
+            client = self._get_database_client(target_database)
+            
+            # Perform search using concrete client implementation
+            papers = client.search_papers(query, **kwargs)
+            
+            # Cache results for potential reuse
+            cache_key = f"{target_database}:{query}"
+            self._papers[cache_key] = papers
+            
+            return papers
+    
+    def _get_database_client(self, database: str) -> AbstractDatabaseClient:
+        """
+        Get or create database client instance
+        
+        Args:
+            database: Database type string
+            
+        Returns:
+            Database client instance
+        """
+        if database not in self._database_clients:
+            # Create new client using factory
+            client = DatabaseClientFactory.create_client(database)
+            self._database_clients[database] = client
+        
+        return self._database_clients[database]
+    
+    def get_paper_details(self, paper_id: str, database: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed information about a specific paper
+        
+        Args:
+            paper_id: Paper identifier
+            database: Database to query (uses selected_database if None)
+            
+        Returns:
+            Detailed paper information or None if not found
+        """
+        target_database = database or self.selected_database
+        if not target_database:
+            return None
+        
+        with self._lock:
+            client = self._get_database_client(target_database)
+            return client.get_paper_details(paper_id)
