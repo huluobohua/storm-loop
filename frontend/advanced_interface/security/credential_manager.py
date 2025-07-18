@@ -28,13 +28,24 @@ class CredentialManager:
         return secrets.token_urlsafe(32)
     
     def _simple_encrypt(self, data: str) -> str:
-        """Simple encryption using base64 (for demo purposes)"""
-        # In production, use proper encryption like Fernet
+        """Simple encryption using base64 (for demo purposes)
+        
+        PRODUCTION WARNING: This is a demo implementation using base64 encoding.
+        For production use, replace with proper encryption like:
+        - cryptography.fernet.Fernet
+        - AES-256-GCM encryption
+        - AWS KMS or similar key management service
+        """
+        # TODO: Replace with proper encryption before production deployment
         return base64.b64encode(data.encode()).decode()
     
     def _simple_decrypt(self, encrypted_data: str) -> str:
-        """Simple decryption using base64 (for demo purposes)"""
-        # In production, use proper decryption like Fernet
+        """Simple decryption using base64 (for demo purposes)
+        
+        PRODUCTION WARNING: This is a demo implementation using base64 decoding.
+        For production use, replace with proper decryption matching the encryption method.
+        """
+        # TODO: Replace with proper decryption before production deployment
         return base64.b64decode(encrypted_data.encode()).decode()
     
     def store_credential(self, service: str, username: str, credential: str) -> None:
