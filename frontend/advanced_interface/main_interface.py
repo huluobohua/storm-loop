@@ -66,6 +66,10 @@ class AdvancedAcademicInterface:
         """Generate output in specified formats"""
         return await self.process_orchestrator.generate_output(research_id, formats)
     
+    def get_research_article(self, research_id: str) -> Dict[str, Any]:
+        """Get the full research article content"""
+        return self.process_orchestrator.get_research_article(research_id)
+    
     # Session Management Delegation
     def create_research_session(self, user_id: str, session_name: str) -> str:
         """Create new research session"""

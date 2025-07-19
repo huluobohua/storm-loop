@@ -274,11 +274,275 @@
         ],
         "status": "pending",
         "subtasks": []
+      },
+      {
+        "id": 16,
+        "title": "Implement Automated Debt Cataloging System",
+        "description": "Develop a system to automatically scan, inventory, and categorize all technical debt markers (TODOs, FIXMEs, HACKs) across the codebase, with a focus on distinguishing between project code and dependencies.",
+        "status": "done",
+        "dependencies": [],
+        "priority": "high",
+        "details": "Use Python 3.9+ with libraries like 'ast' for parsing and 'pandas' for data manipulation. Implement a recursive file scanner with intelligent filtering to exclude virtual environment dependencies. Use regex patterns to extract and classify debt items. Generate a JSON output with debt inventory. Integrate with existing Cursor/Roo multi-agent setup for parallel analysis. Implement visualization tools for codebase health metrics. Focus on dependency management tracking, prevention mechanisms, and code quality enhancement rather than debt reduction.",
+        "testStrategy": "Unit test each component (file scanning, marker extraction, classification). Integration test the full pipeline. Validate output against manually curated sample set. Performance test on large codebases. Include specific tests for dependency exclusion logic to prevent false positives.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Refine Debt Scanning Algorithm",
+            "description": "Update the scanning algorithm to properly exclude virtual environment dependencies and third-party libraries from debt analysis.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Implement Dependency vs. Project Code Classification",
+            "description": "Create a classification system that can accurately distinguish between project-specific code and external dependencies.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Develop Dependency Management Tracking",
+            "description": "Create tools to track and manage dependencies, including version monitoring and update recommendations.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Implement Debt Prevention Mechanisms",
+            "description": "Develop pre-commit hooks and CI/CD pipeline integrations to prevent new technical debt from being introduced.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Create Code Quality Metrics Dashboard",
+            "description": "Build a dashboard that displays code quality metrics and health indicators rather than focusing solely on debt reduction.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Document Findings on False Positive Analysis",
+            "description": "Create comprehensive documentation on the initial analysis results, explaining the 7,604 false positives from virtual environment dependencies and the actual 0 debt items in project code.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "Develop Critical Path Identification Algorithm",
+        "description": "Create an algorithm to identify and prioritize debt items blocking production deployment, focusing on security issues and architecture violations.",
+        "details": "Implement in Python 3.9+. Use 'networkx' for dependency analysis. Integrate with existing security scanning tools (e.g., Bandit for Python). Use 'ast' module for static code analysis to identify architecture violations. Implement severity scoring based on impact and complexity. Output a prioritized list of critical debt items in JSON format.",
+        "testStrategy": "Unit test individual components (security analysis, architecture violation detection). Integration test with sample codebase containing known issues. Validate prioritization against expert review.",
+        "priority": "high",
+        "dependencies": [
+          16
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 18,
+        "title": "Set Up Debt Reduction Infrastructure",
+        "description": "Configure automated tools and workflows for systematic debt reduction, including pre-commit hooks, debt tracking in Task Master AI, and multi-agent workflows.",
+        "details": "Use 'pre-commit' framework for Git hooks. Integrate with Task Master AI using its API (ensure latest version compatibility). Set up Docker containers for isolated agent environments. Use 'GitPython' for Git integration. Implement debt reduction templates using Jinja2. Configure Prometheus and Grafana (latest versions) for metrics and reporting.",
+        "testStrategy": "Test pre-commit hooks with sample debt introductions. Validate Task Master AI integration with mock data. End-to-end test of multi-agent workflow with sample debt item.",
+        "priority": "high",
+        "dependencies": [
+          16,
+          17
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 19,
+        "title": "Implement Security Debt Resolution Workflow",
+        "description": "Develop an automated workflow to identify, prioritize, and resolve security-related technical debt, focusing on critical vulnerabilities.",
+        "details": "Use OWASP ZAP (latest version) for vulnerability scanning. Integrate with Snyk for dependency security checks. Implement custom Python scripts for removing hardcoded credentials and encryption keys. Use 'python-dotenv' for secure configuration management. Integrate with existing CI/CD pipeline for automated security validation.",
+        "testStrategy": "Create a test suite with intentional security vulnerabilities. Validate automated detection and resolution. Perform penetration testing on resolved items. Verify clean security scans post-resolution.",
+        "priority": "high",
+        "dependencies": [
+          18
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 20,
+        "title": "Develop Architecture Debt Resolution System",
+        "description": "Create a system to identify and resolve critical architecture violations, focusing on package identity issues, circular dependencies, and SOLID principle violations.",
+        "details": "Use 'pylint' and 'radon' for code quality and complexity analysis. Implement custom Python scripts for detecting circular dependencies. Use 'networkx' for visualizing and analyzing dependency graphs. Integrate with existing Roo agent for architectural improvements. Implement refactoring strategies using 'rope' library for Python refactoring.",
+        "testStrategy": "Create test cases with known architecture violations. Validate automated detection and suggested resolutions. Perform code reviews on refactored components. Run integration tests to ensure system stability post-refactoring.",
+        "priority": "high",
+        "dependencies": [
+          18
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 21,
+        "title": "Implement Automated Debt Resolution System",
+        "description": "Develop an AI-driven system to automatically resolve low-risk technical debt items using existing multi-agent infrastructure.",
+        "details": "Integrate with Cursor and Claude for code refactoring. Use OpenAI's GPT-4 API for generating fix suggestions. Implement a decision tree for categorizing debt items by risk level. Use 'diff-match-patch' library for applying automated fixes. Integrate with Git for creating branches and pull requests for resolved items.",
+        "testStrategy": "Create a diverse set of low-risk debt items. Validate automated resolution accuracy. Perform code review on AI-generated fixes. Run full test suite on resolved code to ensure no regressions.",
+        "priority": "medium",
+        "dependencies": [
+          18,
+          19,
+          20
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 22,
+        "title": "Develop Module-by-Module Debt Cleanup Workflow",
+        "description": "Create a systematic workflow for cleaning up remaining debt by architectural module, prioritizing based on criticality and debt concentration.",
+        "details": "Implement module prioritization algorithm based on debt concentration and system criticality. Use Git worktrees for parallel development. Integrate with Task Master AI for workflow orchestration. Implement Test-Driven Debt Reduction approach using pytest. Set up Jenkins pipelines for continuous integration and validation.",
+        "testStrategy": "Create mock modules with varying debt levels. Validate prioritization algorithm. Test parallel development workflow with multiple agents. Verify test coverage increase and debt reduction for each module.",
+        "priority": "medium",
+        "dependencies": [
+          21
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 23,
+        "title": "Implement Dependency Modernization System",
+        "description": "Develop a system to resolve all dependency conflicts, update to modern API patterns, and implement dependency vulnerability scanning.",
+        "details": "Use 'pip-compile' for pinning dependency versions. Implement custom conflict resolution for dspy version issues. Use 'safety' for dependency vulnerability scanning. Integrate with PyUp.io for automated dependency updates. Implement API update scripts using 'libcst' for Python code transformations.",
+        "testStrategy": "Create test environment with known dependency conflicts. Validate automated resolution and version pinning. Verify successful builds with updated dependencies. Test API usage before and after modernization.",
+        "priority": "medium",
+        "dependencies": [
+          18
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 24,
+        "title": "Develop Debt Prevention System",
+        "description": "Implement systems to prevent future debt accumulation, including pre-commit hooks, code quality gates, and developer education materials.",
+        "details": "Enhance existing pre-commit hooks with debt detection rules. Implement code quality gates in Jenkins CI pipeline. Use SonarQube (latest version) for comprehensive code quality analysis. Develop debt budget tracking system integrated with GitHub API. Create interactive developer education materials using Jupyter notebooks.",
+        "testStrategy": "Attempt to introduce new debt items and validate prevention. Test CI pipeline with various code quality scenarios. Survey developers on effectiveness of education materials.",
+        "priority": "medium",
+        "dependencies": [
+          18,
+          21,
+          22,
+          23
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 25,
+        "title": "Implement Continuous Debt Monitoring System",
+        "description": "Develop a real-time debt tracking and alerting system integrated with existing monitoring infrastructure.",
+        "details": "Extend Task Master AI dashboards with debt metrics. Implement Prometheus exporters for debt data. Set up Alertmanager for debt threshold notifications. Develop custom Grafana dashboards for debt visualization. Integrate with Slack/Discord using their respective APIs for notifications. Implement weekly report generation using 'reportlab'.",
+        "testStrategy": "Simulate debt fluctuations and validate real-time tracking. Test alert triggers with various threshold scenarios. Verify accuracy of weekly reports against raw data.",
+        "priority": "medium",
+        "dependencies": [
+          18,
+          24
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 26,
+        "title": "Develop Long-term Debt Management Strategy",
+        "description": "Implement sustainable debt management practices including debt SLAs, reduction sprints, and regular architectural reviews.",
+        "details": "Implement debt SLA tracking in Task Master AI. Integrate debt reduction tasks into sprint planning tools (e.g., Jira API integration). Develop architectural review checklist and workflow. Implement knowledge sharing platform using Wiki.js. Create best practices documentation using MkDocs.",
+        "testStrategy": "Simulate multiple sprints and validate debt reduction patterns. Conduct mock architectural reviews. Survey team on effectiveness of knowledge sharing and best practices documentation.",
+        "priority": "low",
+        "dependencies": [
+          25
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 27,
+        "title": "Implement Multi-Agent Coordination System",
+        "description": "Develop a system to coordinate different AI agents (Cursor, Claude, Roo, Trae, Windsurf) for parallel debt reduction activities.",
+        "details": "Implement a central orchestration service using FastAPI. Develop agent-specific adapters for task distribution. Use RabbitMQ for message queuing between agents. Implement result aggregation and conflict resolution mechanisms. Use Docker Compose for managing multi-agent environments.",
+        "testStrategy": "Simulate complex debt reduction scenarios requiring multiple agents. Validate task distribution and result aggregation. Test failure scenarios and agent redundancy.",
+        "priority": "high",
+        "dependencies": [
+          18,
+          21
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 28,
+        "title": "Develop Comprehensive Testing and Validation Framework",
+        "description": "Create a robust testing framework to ensure debt reduction activities do not introduce regressions or new issues.",
+        "details": "Extend existing test suites with debt-specific scenarios. Implement property-based testing using Hypothesis. Set up mutation testing with mutmut. Integrate with Codecov for coverage tracking. Implement visual regression testing for UI components using pytest-selenium.",
+        "testStrategy": "Meta-testing: Develop tests for the testing framework itself. Validate coverage improvements. Introduce intentional bugs and verify detection.",
+        "priority": "high",
+        "dependencies": [
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 29,
+        "title": "Implement Debt Reduction Metrics and Reporting System",
+        "description": "Develop a comprehensive system for tracking debt reduction progress, generating reports, and providing insights for stakeholders.",
+        "details": "Extend Task Master AI with custom debt reduction metrics. Implement data warehousing solution using ClickHouse for historical analysis. Develop interactive dashboards using Dash by Plotly. Implement natural language generation for report summaries using GPT-3. Set up automated email reporting using SendGrid API.",
+        "testStrategy": "Validate metric calculations against manual audits. Test report generation with various progress scenarios. Conduct user acceptance testing on dashboards and reports.",
+        "priority": "medium",
+        "dependencies": [
+          16,
+          25,
+          26
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 30,
+        "title": "Develop Debt-Aware Code Review System",
+        "description": "Implement an enhanced code review system that highlights debt implications and enforces debt reduction policies during the review process.",
+        "details": "Extend existing code review tools (e.g., Gerrit or GitHub PR reviews) with debt analysis plugins. Implement automated commenting on debt introductions or resolutions. Develop a debt impact scorer for proposed changes. Integrate with SonarQube for in-depth code quality analysis during reviews.",
+        "testStrategy": "Simulate code reviews with various debt scenarios. Validate automated comments and debt impact scores. Conduct user studies to assess effectiveness in preventing new debt introduction.",
+        "priority": "low",
+        "dependencies": [
+          18,
+          24,
+          26
+        ],
+        "status": "pending",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-06-28T20:38:06.950Z",
-      "updated": "2025-06-30T02:23:40.687Z",
+      "updated": "2025-07-19T00:11:42.845Z",
       "description": "Tasks for master context"
     }
   }

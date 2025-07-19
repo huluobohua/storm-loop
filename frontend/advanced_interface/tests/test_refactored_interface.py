@@ -62,7 +62,11 @@ class TestRefactoredAdvancedAcademicInterface(unittest.TestCase):
         self.assertTrue(len(session_id) > 0)
         
         # Test session configuration with validation
-        test_config = {"research_config": {"storm_mode": "hybrid", "max_papers": 25}}
+        test_config = {
+            "session_name": "Updated Test Session",
+            "user_id": "user_123",
+            "research_config": {"storm_mode": "hybrid", "max_papers": 25}
+        }
         self.interface.configure_session(session_id, test_config)
         
         # Verify session facade is properly initialized
