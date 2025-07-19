@@ -313,14 +313,97 @@ class TestCitationValidatorIntegration:
     @pytest.mark.asyncio
     async def test_real_openalex_integration(self):
         """Integration test with real OpenAlex API (requires network)."""
-        # This test should only run in integration test environments
-        # Will implement with real API calls when ready
-        pytest.skip("Integration test - requires real API access")
+        import os
+        if not os.getenv("INTEGRATION_TESTS_ENABLED"):
+            pytest.skip("Integration tests not enabled - set INTEGRATION_TESTS_ENABLED=1")
+        
+        from knowledge_storm.citation_verification import CitationValidator
+        from knowledge_storm.citation_verification.models import Citation
+        
+        # Use real validator (no mocks)
+        validator = CitationValidator()
+        
+        # Real citation that should exist in OpenAlex
+        real_citation = Citation(
+            id="test_1",
+            title="Attention Is All You Need",
+            authors=["Ashish Vaswani", "Noam Shazeer", "Niki Parmar"],
+            journal="Advances in Neural Information Processing Systems",
+            year=2017,
+            doi="10.48550/arXiv.1706.03762"
+        )
+        
+        # Test validation
+        result = await validator.validate_citation(real_citation)
+        
+        # Should find the paper
+        assert result.is_valid is True
+        assert result.confidence_score > 0.8
+        assert result.source_database in ["openalex", "crossref"]
+        assert "transformer" in result.title.lower() or "attention" in result.title.lower()
     
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_real_crossref_integration(self):
         """Integration test with real Crossref API (requires network)."""
-        # This test should only run in integration test environments  
-        # Will implement with real API calls when ready
-        pytest.skip("Integration test - requires real API access")
+        import os
+        if not os.getenv("INTEGRATION_TESTS_ENABLED"):
+            pytest.skip("Integration tests not enabled - set INTEGRATION_TESTS_ENABLED=1")
+        
+        from knowledge_storm.citation_verification import CitationValidator
+        from knowledge_storm.citation_verification.models import Citation
+        
+        # Use real validator (no mocks)
+        validator = CitationValidator()
+        
+        # Real citation that should exist in Crossref
+        real_citation = Citation(
+            id="test_2",
+            title="The PageRank Citation Ranking: Bringing Order to the Web",
+            authors=["Lawrence Page", "Sergey Brin", "Rajeev Motwani", "Terry Winograd"],
+            journal="Stanford InfoLab",
+            year=1999,
+            doi="10.1145/289444.289459"  # This is a real DOI
+        )
+        
+        # Test validation
+        result = await validator.validate_citation(real_citation)
+        
+        # Should find the paper
+        assert result.is_valid is True
+        assert result.confidence_score > 0.7
+        assert result.source_database in ["openalex", "crossref"]
+        assert "pagerank" in result.title.lower() or "page" in result.title.lower()
+    
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_api_error_recovery(self):
+        """Test error recovery and fallback strategies."""
+        import os
+        if not os.getenv("INTEGRATION_TESTS_ENABLED"):
+            pytest.skip("Integration tests not enabled - set INTEGRATION_TESTS_ENABLED=1")
+        
+        from knowledge_storm.citation_verification import CitationValidator
+        from knowledge_storm.citation_verification.models import Citation
+        
+        validator = CitationValidator()
+        
+        # Citation with intentionally problematic data to test error handling
+        problematic_citation = Citation(
+            id="test_error",
+            title="Ä" * 500,  # Very long title with special chars
+            authors=["Invalid@Author.Name"] * 100,  # Many invalid authors
+            journal="Non-Existent Journal åæø",
+            year=1800,  # Very old year
+            doi="invalid-doi-format"
+        )
+        
+        # Should handle gracefully without crashing
+        result = await validator.validate_citation(problematic_citation)
+        
+        # Should return a result (even if invalid)
+        assert result is not None
+        assert hasattr(result, 'is_valid')
+        assert hasattr(result, 'confidence_score')
+        # Likely invalid, but shouldn't crash
+        assert result.confidence_score >= 0.0
