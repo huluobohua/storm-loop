@@ -4,7 +4,7 @@ Pydantic schemas for validating research and session configuration
 """
 
 from typing import Dict, List, Optional, Any, Union
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from enum import Enum
 
 
@@ -152,11 +152,11 @@ class ResearchConfigSchema(BaseModel):
         
         return self
     
-    class Config:
-        """Pydantic configuration"""
-        use_enum_values = True
-        validate_assignment = True
-        extra = "forbid"  # Reject unknown fields
+    model_config = ConfigDict(
+        use_enum_values=True,
+        validate_assignment=True,
+        extra="forbid"  # Reject unknown fields
+    )
 
 
 class SessionConfigSchema(BaseModel):
@@ -165,15 +165,15 @@ class SessionConfigSchema(BaseModel):
     Used for research session setup and management
     """
     
-    session_name: str = Field(
-        ...,
+    session_name: Optional[str] = Field(
+        default=None,
         min_length=1,
         max_length=100,
         description="Name for the research session"
     )
     
-    user_id: str = Field(
-        ...,
+    user_id: Optional[str] = Field(
+        default=None,
         min_length=1,
         max_length=50,
         description="User identifier"
@@ -211,6 +211,9 @@ class SessionConfigSchema(BaseModel):
     @classmethod
     def validate_session_name(cls, v):
         """Validate session name"""
+        if v is None:
+            return v
+        
         # Remove excessive whitespace and validate
         v = v.strip()
         if not v:
@@ -248,7 +251,7 @@ class SessionConfigSchema(BaseModel):
             raise ValueError(f"Priority must be one of: {valid_priorities}")
         return v.lower()
     
-    class Config:
-        """Pydantic configuration"""
-        validate_assignment = True
-        extra = "forbid"  # Reject unknown fields
+    model_config = ConfigDict(
+        validate_assignment=True,
+        extra="forbid"  # Reject unknown fields
+    )

@@ -7,6 +7,7 @@ import unittest
 import asyncio
 import sys
 import os
+import pytest
 sys.path.insert(0, os.path.join(os.getcwd(), 'frontend'))
 
 # Set development environment for testing
@@ -133,7 +134,7 @@ class TestPydanticSchemaValidation(unittest.TestCase):
         with self.assertRaises(ValidationError) as context:
             ResearchConfigSchema(**config)
         
-        self.assertIn("extra fields not permitted", str(context.exception))
+        self.assertIn("Extra inputs are not permitted", str(context.exception))
     
     def test_session_config_schema_valid(self):
         """Test that valid session config passes validation"""
@@ -182,6 +183,7 @@ class TestPydanticSchemaValidation(unittest.TestCase):
         
         self.assertIn("storm_mode", str(context.exception))
     
+    @pytest.mark.asyncio
     async def test_interface_validates_research_config(self):
         """Test that interface validates research configuration"""
         # Valid config should work
@@ -259,14 +261,13 @@ class TestPydanticSchemaValidation(unittest.TestCase):
     
     def test_schema_normalizes_values(self):
         """Test that schema normalizes values correctly"""
-        config = {
+        # Research config normalization
+        research_config = {
             "citation_style": "APA",  # Should be lowercased
             "language": "EN",  # Should be lowercased
-            "priority": "HIGH"  # Should be lowercased (for session config)
         }
         
-        # Research config normalization
-        research_validated = ResearchConfigSchema(**config)
+        research_validated = ResearchConfigSchema(**research_config)
         self.assertEqual(research_validated.citation_style, "apa")
         self.assertEqual(research_validated.language, "en")
         
@@ -274,7 +275,7 @@ class TestPydanticSchemaValidation(unittest.TestCase):
         session_config = {
             "session_name": "  Test Session  ",  # Should be stripped
             "user_id": "user123",
-            "priority": "HIGH",
+            "priority": "HIGH",  # Should be lowercased
             "tags": ["  Tag1  ", "TAG2", "tag3  "]  # Should be normalized
         }
         
@@ -292,7 +293,7 @@ class TestPydanticSchemaValidation(unittest.TestCase):
         }
         
         validated = ResearchConfigSchema(**config)
-        config_dict = validated.dict()
+        config_dict = validated.model_dump()
         
         # Should be a regular dictionary that can be used with existing code
         self.assertIsInstance(config_dict, dict)
