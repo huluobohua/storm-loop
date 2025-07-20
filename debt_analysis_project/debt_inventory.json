@@ -1,0 +1,26 @@
+{
+  "scan_timestamp": "2025-07-18T20:06:32.395582",
+  "total_debt_items": 1,
+  "debt_items": [
+    {
+      "file_path": "tools/debt_cataloger.py",
+      "line_number": 50,
+      "debt_type": "TODO",
+      "content": ", FIXME, HACK",
+      "priority": "critical",
+      "category": "architecture",
+      "context_lines": [
+        "\"\"\"Represents a single technical debt item\"\"\"",
+        "file_path: str",
+        "line_number: int",
+        "debt_type: str  # TODO, FIXME, HACK",
+        "content: str",
+        "priority: str  # critical, high, medium, low",
+        "category: str  # security, architecture, performance, quality"
+      ],
+      "estimated_effort": "2-4 hours",
+      "risk_level": "blocking",
+      "debt_id": "e5bd3070056b"
+    }
+  ]
+}
