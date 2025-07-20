@@ -19,14 +19,16 @@ class IntegrityChecker:
     
     Coordinates specialized pattern detectors.
     Single responsibility: fabrication detection coordination.
+    Follows dependency injection principle.
     """
     
-    def __init__(self):
-        """Initialize pattern detection components."""
-        self._title_detector = TitlePatternDetector()
-        self._author_detector = AuthorPatternDetector()
-        self._journal_detector = JournalPatternDetector()
-        self._doi_detector = DOIPatternDetector()
+    def __init__(self, title_detector=None, author_detector=None, 
+                 journal_detector=None, doi_detector=None):
+        """Initialize with injected dependencies (DI pattern)."""
+        self._title_detector = title_detector or TitlePatternDetector()
+        self._author_detector = author_detector or AuthorPatternDetector()
+        self._journal_detector = journal_detector or JournalPatternDetector()
+        self._doi_detector = doi_detector or DOIPatternDetector()
     
     def check_citation(self, citation: Citation) -> List[str]:
         """Check single citation for fabrication indicators."""

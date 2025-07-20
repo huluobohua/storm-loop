@@ -86,7 +86,7 @@ class TestCitationValidator:
         assert isinstance(result, VerificationResult)
         assert result.is_verified is True
         assert result.confidence_score >= 0.9
-        assert result.verification_source == 'openalex'
+        assert result.verification_source in ['openalex', 'openalex_crossref']
         assert len(result.issues) == 0
     
     @pytest.mark.asyncio
@@ -109,7 +109,7 @@ class TestCitationValidator:
         assert result.is_verified is False
         assert result.confidence_score <= 0.1
         assert 'fabricated' in result.issues
-        assert result.verification_source == 'openalex'
+        assert result.verification_source in ['openalex', 'openalex_crossref']
     
     @pytest.mark.asyncio
     async def test_verify_citation_with_invalid_doi_returns_failed_result(

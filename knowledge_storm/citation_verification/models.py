@@ -101,7 +101,10 @@ class VerificationResult:
     
     def _validate_source(self) -> None:
         """Validate verification source is recognized."""
-        valid_sources = {'openalex', 'crossref', 'local_cache', 'error'}
+        valid_sources = {
+            'openalex', 'crossref', 'local_cache', 'error', 
+            'openalex_crossref', 'api_error', 'concurrent_api_error'
+        }
         if self.verification_source not in valid_sources:
             raise ValueError(f"Invalid verification source: {self.verification_source}")
 

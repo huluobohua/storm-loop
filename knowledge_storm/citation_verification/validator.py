@@ -63,14 +63,22 @@ class CitationValidator:
     Follows dependency injection for testability.
     """
     
-    def __init__(self, openalex_client: DatabaseClient, crossref_client: DatabaseClient):
+    def __init__(self, openalex_client: DatabaseClient, crossref_client: DatabaseClient, 
+                 integrity_checker=None):
         """Initialize with injected dependencies."""
         self._openalex = openalex_client
         self._crossref = crossref_client
+        self._integrity_checker = integrity_checker
     
     async def verify_citation(self, citation: Citation) -> VerificationResult:
         """Verify single citation against academic databases."""
         try:
+            # CRITICAL: Check integrity BEFORE external API verification
+            if self._integrity_checker:
+                integrity_issues = self._integrity_checker.check_citation(citation)
+                if integrity_issues:
+                    return self._create_error_result("integrity_error", integrity_issues)
+            
             return await self._perform_verification(citation)
         except asyncio.TimeoutError:
             return self._create_error_result("timeout", ["api_timeout"])
@@ -80,8 +88,8 @@ class CitationValidator:
             return self._create_error_result("unknown_error", [str(e)])
     
     async def _perform_verification(self, citation: Citation) -> VerificationResult:
-        """Perform actual verification logic."""
-        # Check DOI first if present
+        """Perform actual verification logic with concurrent API calls."""
+        # Check DOI first if present (quick validation)
         if citation.doi and hasattr(self._crossref, 'validate_doi'):
             doi_valid = await self._crossref.validate_doi(citation.doi)
             if not doi_valid:
@@ -92,9 +100,41 @@ class CitationValidator:
                     issues=["invalid_doi"]
                 )
         
-        # Verify against OpenAlex
-        openalex_result = await self._openalex.verify_paper(citation)
+        # Concurrent API calls for performance optimization
+        tasks = []
+        openalex_task = None
+        crossref_task = None
         
+        # Always try OpenAlex (required)
+        if hasattr(self._openalex, 'verify_paper') or callable(getattr(self._openalex, 'verify_paper', None)):
+            openalex_task = self._openalex.verify_paper(citation)
+            tasks.append(openalex_task)
+        
+        # Try Crossref if available
+        if hasattr(self._crossref, 'verify_paper') and callable(getattr(self._crossref, 'verify_paper', None)):
+            crossref_task = self._crossref.verify_paper(citation)
+            tasks.append(crossref_task)
+        
+        if len(tasks) == 1:
+            # Only OpenAlex available, use single result processing
+            try:
+                openalex_result = await openalex_task
+                return self._process_single_result(openalex_result, citation)
+            except Exception as e:
+                return self._create_error_result("api_error", [str(e)], source="api_error")
+        elif len(tasks) == 2:
+            # Both APIs available, use concurrent processing
+            try:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                return self._process_concurrent_results(results, citation)
+            except Exception as e:
+                return self._create_error_result("concurrent_api_error", [str(e)], source="concurrent_api_error")
+        else:
+            # No valid APIs
+            return self._create_error_result("no_api_available", ["No verification APIs configured"], source="error")
+    
+    def _process_single_result(self, openalex_result: dict, citation: Citation) -> VerificationResult:
+        """Process single OpenAlex result (fallback)."""
         if not openalex_result['exists']:
             return VerificationResult(
                 is_verified=False,
@@ -103,7 +143,6 @@ class CitationValidator:
                 issues=["fabricated"]
             )
         
-        # Calculate confidence
         confidence = self._calculate_confidence(openalex_result)
         issues = self._identify_issues(openalex_result)
         
@@ -113,6 +152,84 @@ class CitationValidator:
             verification_source="openalex",
             issues=issues
         )
+    
+    def _process_concurrent_results(self, results: List, citation: Citation) -> VerificationResult:
+        """Process results from concurrent API calls."""
+        openalex_result = None
+        crossref_result = None
+        errors = []
+        
+        # Extract successful results and check for exceptions
+        for i, result in enumerate(results):
+            if isinstance(result, dict):
+                if i == 0:  # OpenAlex result
+                    openalex_result = result
+                elif i == 1:  # Crossref result
+                    crossref_result = result
+            elif isinstance(result, Exception):
+                # Handle exceptions properly
+                if i == 0:  # OpenAlex exception
+                    if isinstance(result, asyncio.TimeoutError):
+                        return self._create_error_result("timeout", ["api_timeout"])
+                    elif isinstance(result, ConnectionError):
+                        return self._create_error_result("network_error", ["connection_failed"])
+                    else:
+                        return self._create_error_result("unknown_error", [str(result)])
+                errors.append(result)
+        
+        # Use OpenAlex as primary source
+        if openalex_result and not openalex_result.get('exists', False):
+            return VerificationResult(
+                is_verified=False,
+                confidence_score=0.0,
+                verification_source="openalex",
+                issues=["fabricated"]
+            )
+        
+        # Combine confidence from multiple sources
+        confidence = self._combine_confidence_scores(openalex_result, crossref_result)
+        issues = []
+        
+        if openalex_result:
+            issues.extend(self._identify_issues(openalex_result))
+        
+        # Add crossref-specific issues if available
+        if crossref_result and not crossref_result.get('metadata_matches', True):
+            issues.append('crossref_metadata_mismatch')
+        
+        return VerificationResult(
+            is_verified=confidence >= 0.7,
+            confidence_score=confidence,
+            verification_source="openalex_crossref",
+            issues=issues
+        )
+    
+    def _combine_confidence_scores(self, openalex_result: dict, crossref_result: dict) -> float:
+        """Intelligently combine confidence scores from multiple sources."""
+        openalex_confidence = 0.0
+        crossref_confidence = 0.0
+        
+        if openalex_result:
+            openalex_confidence = self._calculate_confidence(openalex_result)
+        
+        if crossref_result:
+            # Calculate Crossref confidence
+            base_score = 0.5 if crossref_result.get('exists', False) else 0.0
+            if crossref_result.get('metadata_matches', False):
+                base_score += 0.3
+            if crossref_result.get('doi_valid', False):
+                base_score += 0.2
+            crossref_confidence = min(base_score, 1.0)
+        
+        # Weight OpenAlex higher (more comprehensive), combine intelligently
+        if openalex_confidence > 0 and crossref_confidence > 0:
+            return (openalex_confidence * 0.7) + (crossref_confidence * 0.3)
+        elif openalex_confidence > 0:
+            return openalex_confidence
+        elif crossref_confidence > 0:
+            return crossref_confidence
+        else:
+            return 0.0
     
     def _calculate_confidence(self, result: dict) -> float:
         """Calculate confidence score from verification results."""
@@ -152,12 +269,12 @@ class CitationValidator:
         
         return issues
     
-    def _create_error_result(self, error_type: str, issues: List[str]) -> VerificationResult:
+    def _create_error_result(self, error_type: str, issues: List[str], source: str = "error") -> VerificationResult:
         """Create error verification result."""
         return VerificationResult(
             is_verified=False,
             confidence_score=0.0,
-            verification_source="error",
+            verification_source=source,
             issues=issues,
             error_type=error_type
         )
