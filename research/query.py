@@ -41,11 +41,15 @@ Topic: {topic}"""
     def _clean_queries(self, lines: List[str]) -> List[str]:
         """Clean and filter query lines."""
         cleaned = []
+        self._process_lines(lines, cleaned)
+        return cleaned
+    
+    def _process_lines(self, lines: List[str], cleaned: List[str]):
+        """Process lines and append valid ones to cleaned list."""
         for line in lines:
             clean_line = self._clean_line(line)
             if len(clean_line) > 10:
                 cleaned.append(clean_line)
-        return cleaned
     
     def _clean_line(self, line: str) -> str:
         """Clean individual query line.""" 

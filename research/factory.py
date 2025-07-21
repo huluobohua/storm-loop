@@ -18,13 +18,25 @@ class ResearchServiceFactory:
     @staticmethod
     def create(config: ResearchConfig) -> ResearchService:
         """Create fully configured research service."""
+        components = ResearchServiceFactory._create_components(config)
+        return ResearchServiceFactory._assemble_service(components)
+    
+    @staticmethod
+    def _create_components(config: ResearchConfig) -> dict:
+        """Create service components from configuration."""
         llm_service = OpenAIService(config.llm_api_key)
-        query_generator = AIQueryGenerator(llm_service)
-        search_engine = SecureSearchEngine(config.search_api_key)  
-        content_processor = AIContentProcessor(llm_service)
-        
+        return {
+            'llm': llm_service,
+            'query_gen': AIQueryGenerator(llm_service),
+            'search': SecureSearchEngine(config.search_api_key),
+            'processor': AIContentProcessor(llm_service)
+        }
+    
+    @staticmethod
+    def _assemble_service(components: dict) -> ResearchService:
+        """Assemble service from components."""
         return ResearchService(
-            query_generator=query_generator,
-            search_engine=search_engine,
-            content_processor=content_processor
+            query_generator=components['query_gen'],
+            search_engine=components['search'],
+            content_processor=components['processor']
         )
