@@ -101,21 +101,23 @@ class TestSearchEngine:
         
         assert hasattr(SearchEngine, 'search')
     
-    def test_secure_search_engine_uses_headers_not_url_params(self):
-        """Test that search engine puts API keys in headers, not URL parameters"""
+    def test_secure_search_engine_uses_correct_serpapi_format(self):
+        """Test that search engine uses correct SerpApi authentication format"""
         from research.search import SecureSearchEngine
         
         engine = SecureSearchEngine(api_key="test-key")
         
-        # Test header building (SECURE)
+        # Test headers don't contain API key (SerpApi uses params)
         headers = engine._build_headers()
-        assert 'test-key' in str(headers)
-        assert headers['Authorization'] == 'Bearer test-key'
+        assert 'test-key' not in str(headers)
+        assert 'Authorization' not in headers
+        assert headers['Content-Type'] == 'application/json'
         
-        # Test parameter building (NO API KEYS)
+        # Test parameters contain API key (SerpApi requirement)
         params = engine._build_params("test query")
-        assert 'test-key' not in str(params)
+        assert params['api_key'] == "test-key"
         assert params['q'] == "test query"
+        assert params['engine'] == "google"
     
     @pytest.mark.asyncio
     async def test_search_engine_returns_structured_results(self):

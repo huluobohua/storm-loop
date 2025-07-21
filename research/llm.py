@@ -54,5 +54,6 @@ class OpenAIService(LLMService):
         """Extract content from API response."""
         try:
             return response['choices'][0]['message']['content']
-        except (KeyError, IndexError):
-            return "Content generation failed"
+        except (KeyError, IndexError) as e:
+            from .exceptions import LLMServiceError
+            raise LLMServiceError(f"Invalid API response format: {e}")

@@ -23,15 +23,25 @@ class ResearchService:
     async def generate_research(self, topic: str) -> Dict[str, Any]:
         """Generate complete research report."""
         try:
-            queries = await self._generate_queries(topic)
-            search_results = await self._search_all(queries)  
-            outline = await self._generate_outline(topic, search_results)
-            article = await self._generate_article(outline, search_results)
-            polished = await self._polish_article(article)
-            return self._build_result(topic, queries, search_results, 
-                                      outline, article, polished)
+            research_data = await self._collect_research_data(topic)
+            content_data = await self._generate_content(research_data)
+            return self._build_final_result(research_data, content_data)
         except Exception as e:
             self._handle_error(e)
+    
+    async def _collect_research_data(self, topic: str) -> Dict[str, Any]:
+        """Collect queries and search results."""
+        queries = await self._generate_queries(topic)
+        search_results = await self._search_all(queries)
+        return {'topic': topic, 'queries': queries, 'search_results': search_results}
+    
+    async def _generate_content(self, research_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate outline, article and polish content."""
+        topic, results = research_data['topic'], research_data['search_results']
+        outline = await self._generate_outline(topic, results)
+        article = await self._generate_article(outline, results)
+        polished = await self._polish_article(article)
+        return {'outline': outline, 'article': article, 'polished': polished}
     
     async def _generate_queries(self, topic: str):
         """Generate queries using injected generator."""
@@ -63,16 +73,12 @@ class ResearchService:
         """Polish article using injected processor."""
         return await self.content_processor.polish_content(article)
     
-    def _build_result(self, topic, queries, results, outline, article, polished):
-        """Build final result dictionary."""
-        return {
-            'topic': topic,
-            'queries': queries,
-            'search_results': results,
-            'outline': outline,
-            'article': article, 
-            'polished_article': polished
-        }
+    def _build_final_result(self, research_data: Dict, content_data: Dict) -> Dict[str, Any]:
+        """Build final result dictionary from research and content data."""
+        result = research_data.copy()
+        result.update(content_data)
+        result['polished_article'] = result.pop('polished')
+        return result
     
     def _handle_error(self, error):
         """Handle and re-raise errors appropriately."""

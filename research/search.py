@@ -25,17 +25,18 @@ class SecureSearchEngine(SearchEngine):
         return self._parse_results(response_data)
     
     def _build_headers(self) -> Dict[str, str]:
-        """Build headers with API key (SECURE)."""
+        """Build headers (no auth - SerpApi uses query params)."""
         return {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'Research-Service/1.0'
         }
     
     def _build_params(self, query: str) -> Dict[str, str]:
-        """Build query parameters (NO API KEYS)."""
+        """Build query parameters with API key (SerpApi requirement)."""
         return {
             'q': query,
-            'engine': 'google'
+            'engine': 'google',
+            'api_key': self.api_key
         }
     
     async def _make_request(self, headers: Dict, params: Dict) -> Dict:

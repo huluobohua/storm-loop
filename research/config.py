@@ -28,5 +28,5 @@ class ResearchConfig:
         if not self.llm_api_key:
             raise ConfigurationError("llm_api_key is required")
         
-        if self.max_queries != 8:
-            raise ConfigurationError("max_queries must be 8")
+        if not isinstance(self.max_queries, int) or self.max_queries < 1 or self.max_queries > 20:
+            raise ConfigurationError("max_queries must be an integer between 1 and 20")

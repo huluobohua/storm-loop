@@ -28,3 +28,8 @@ class ContentProcessingError(ResearchError):
 class ConfigurationError(ResearchError):
     """Raised when configuration is invalid."""
     pass
+
+
+class LLMServiceError(ResearchError):
+    """Raised when LLM service operations fail."""
+    pass
