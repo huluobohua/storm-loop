@@ -50,7 +50,7 @@ class TestPRISMAScreenerAgent:
         agent = PRISMAScreenerAgent()
         
         assert agent.name == "PRISMA Screener Agent"
-        assert agent.description == "Automated paper screening for systematic reviews"
+        assert agent.description == "Systematic review screening with 80/20 methodology"
         assert len(agent.capabilities) == 3
         
         # Check capabilities

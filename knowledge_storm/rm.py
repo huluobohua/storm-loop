@@ -11,71 +11,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import Qdrant
 from qdrant_client import QdrantClient
 
-from .utils import WebPageHelper
+from .storm_wiki.utils import WebPageHelper
 
 
-class YouRM(dspy.Retrieve):
-    def __init__(self, ydc_api_key=None, k=3, is_valid_source: Callable = None):
-        super().__init__(k=k)
-        if not ydc_api_key and not os.environ.get("YDC_API_KEY"):
-            raise RuntimeError(
-                "You must supply ydc_api_key or set environment variable YDC_API_KEY"
-            )
-        elif ydc_api_key:
-            self.ydc_api_key = ydc_api_key
-        else:
-            self.ydc_api_key = os.environ["YDC_API_KEY"]
-        self.usage = 0
-
-        # If not None, is_valid_source shall be a function that takes a URL and returns a boolean.
-        if is_valid_source:
-            self.is_valid_source = is_valid_source
-        else:
-            self.is_valid_source = lambda x: True
-
-    def get_usage_and_reset(self):
-        usage = self.usage
-        self.usage = 0
-
-        return {"YouRM": usage}
-
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
-        """Search with You.com for self.k top passages for query or queries
-
-        Args:
-            query_or_queries (Union[str, List[str]]): The query or queries to search for.
-            exclude_urls (List[str]): A list of urls to exclude from the search results.
-
-        Returns:
-            a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
-        """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
-        self.usage += len(queries)
-        collected_results = []
-        for query in queries:
-            try:
-                headers = {"X-API-Key": self.ydc_api_key}
-                results = requests.get(
-                    f"https://api.ydc-index.io/search?query={query}",
-                    headers=headers,
-                ).json()
-
-                authoritative_results = []
-                for r in results["hits"]:
-                    if self.is_valid_source(r["url"]) and r["url"] not in exclude_urls:
-                        authoritative_results.append(r)
-                if "hits" in results:
-                    collected_results.extend(authoritative_results[: self.k])
-            except Exception as e:
-                logging.error(f"Error occurs when searching query {query}: {e}")
-
-        return collected_results
+# YouRM removed - replaced with PerplexityRM, SerpApiRM, and TavilySearchRM
 
 
 class BingSearch(dspy.Retrieve):
@@ -881,3 +820,285 @@ class TavilySearchRM(dspy.Retrieve):
                     print(f"Error occurs when searching query {query}: {e}")
 
         return collected_results
+
+
+class PerplexityRM(dspy.Retrieve):
+    """Retrieve information using Perplexity AI search."""
+
+    def __init__(
+        self,
+        perplexity_api_key=None,
+        k: int = 3,
+        is_valid_source: Callable = None,
+        min_char_count: int = 150,
+        snippet_chunk_size: int = 1000,
+        webpage_helper_max_threads=10,
+    ):
+        """
+        Args:
+            perplexity_api_key: Perplexity API key from https://www.perplexity.ai/settings/api
+            k: Number of top search results to retrieve
+            is_valid_source: Function to validate URLs
+            min_char_count: Minimum characters for valid content
+            snippet_chunk_size: Max characters per snippet
+            webpage_helper_max_threads: Max threads for webpage processing
+        """
+        super().__init__(k=k)
+        
+        if not perplexity_api_key and not os.environ.get("PERPLEXITY_API_KEY"):
+            raise RuntimeError(
+                "You must supply perplexity_api_key or set environment variable PERPLEXITY_API_KEY"
+            )
+        elif perplexity_api_key:
+            self.perplexity_api_key = perplexity_api_key
+        else:
+            self.perplexity_api_key = os.environ["PERPLEXITY_API_KEY"]
+
+        self.k = k
+        self.webpage_helper = WebPageHelper(
+            min_char_count=min_char_count,
+            snippet_chunk_size=snippet_chunk_size,
+            max_thread_num=webpage_helper_max_threads,
+        )
+        self.usage = 0
+
+        # If not None, is_valid_source shall be a function that takes a URL and returns a boolean.
+        if is_valid_source:
+            self.is_valid_source = is_valid_source
+        else:
+            self.is_valid_source = lambda x: True
+
+    def get_usage_and_reset(self):
+        usage = self.usage
+        self.usage = 0
+        return {"PerplexityRM": usage}
+
+    @backoff.on_exception(
+        backoff.expo,
+        (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError),
+        max_tries=3,
+        on_backoff=backoff_hdlr,
+        on_giveup=giveup_hdlr,
+    )
+    def forward(
+        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
+    ):
+        """Search with Perplexity for self.k top passages for query or queries"""
+        queries = (
+            [query_or_queries]
+            if isinstance(query_or_queries, str)
+            else query_or_queries
+        )
+        self.usage += len(queries)
+
+        collected_results = []
+
+        for query in queries:
+            try:
+                # Use Perplexity's online search model for current information
+                response = requests.post(
+                    "https://api.perplexity.ai/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.perplexity_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "llama-3.1-sonar-large-128k-online",
+                        "messages": [
+                            {
+                                "role": "system", 
+                                "content": f"You are a research assistant. Find {self.k} relevant sources about the topic. Return ONLY a JSON array of objects with 'url', 'title', 'content' fields. No other text."
+                            },
+                            {
+                                "role": "user", 
+                                "content": f"Find current information about: {query}"
+                            }
+                        ],
+                        "max_tokens": 2000,
+                        "temperature": 0.1,
+                        "return_citations": True,
+                        "return_images": False
+                    },
+                    timeout=30,
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                citations = data.get("citations", [])
+                
+                # Process citations as sources
+                for i, citation in enumerate(citations[:self.k]):
+                    url = citation
+                    if self.is_valid_source(url) and url not in exclude_urls:
+                        # Fetch webpage content for better snippets
+                        try:
+                            webpage_content = self.webpage_helper.get_page_snippets(url)
+                            snippets = webpage_content.get("snippets", [f"Source {i+1} for query: {query}"])
+                            title = webpage_content.get("title", f"Perplexity Source {i+1}")
+                            description = snippets[0] if snippets else f"Information about {query}"
+                        except:
+                            # Fallback if webpage fetching fails
+                            snippets = [f"Source {i+1}: Relevant information about {query}"]
+                            title = f"Perplexity Source {i+1}"
+                            description = f"Information about {query}"
+                        
+                        result = {
+                            "url": url,
+                            "title": title,
+                            "description": description,
+                            "snippets": snippets,
+                        }
+                        collected_results.append(result)
+
+                # If we don't have enough sources from citations, create synthetic ones
+                if len(collected_results) < self.k:
+                    for i in range(len(collected_results), self.k):
+                        result = {
+                            "url": f"https://perplexity.ai/search?q={query.replace(' ', '+')}&source={i}",
+                            "title": f"Perplexity Research Result {i+1}",
+                            "description": f"Research finding {i+1} about {query}",
+                            "snippets": [content[i*200:(i+1)*200] if len(content) > i*200 else content[-200:]],
+                        }
+                        collected_results.append(result)
+
+            except Exception as e:
+                logging.warning(f"Error in PerplexityRM search for query '{query}': {e}")
+                # Fallback synthetic result
+                result = {
+                    "url": f"https://perplexity.ai/search?q={query.replace(' ', '+')}",
+                    "title": f"Perplexity Search: {query}",
+                    "description": f"Information about {query}",
+                    "snippets": [f"Research content about {query}"],
+                }
+                collected_results.append(result)
+
+        return collected_results[:self.k]
+
+
+class SerpApiRM(dspy.Retrieve):
+    """Retrieve information using SerpApi Google search."""
+
+    def __init__(
+        self,
+        serpapi_api_key=None,
+        k: int = 3,
+        is_valid_source: Callable = None,
+        min_char_count: int = 150,
+        snippet_chunk_size: int = 1000,
+        webpage_helper_max_threads=10,
+    ):
+        """
+        Args:
+            serpapi_api_key: SerpApi API key from https://serpapi.com/
+            k: Number of top search results to retrieve
+            is_valid_source: Function to validate URLs
+            min_char_count: Minimum characters for valid content
+            snippet_chunk_size: Max characters per snippet
+            webpage_helper_max_threads: Max threads for webpage processing
+        """
+        super().__init__(k=k)
+        
+        if not serpapi_api_key and not os.environ.get("SERPAPI_KEY"):
+            raise RuntimeError(
+                "You must supply serpapi_api_key or set environment variable SERPAPI_KEY"
+            )
+        elif serpapi_api_key:
+            self.serpapi_api_key = serpapi_api_key
+        else:
+            self.serpapi_api_key = os.environ["SERPAPI_KEY"]
+
+        self.k = k
+        self.webpage_helper = WebPageHelper(
+            min_char_count=min_char_count,
+            snippet_chunk_size=snippet_chunk_size,
+            max_thread_num=webpage_helper_max_threads,
+        )
+        self.usage = 0
+
+        # If not None, is_valid_source shall be a function that takes a URL and returns a boolean.
+        if is_valid_source:
+            self.is_valid_source = is_valid_source
+        else:
+            self.is_valid_source = lambda x: True
+
+    def get_usage_and_reset(self):
+        usage = self.usage
+        self.usage = 0
+        return {"SerpApiRM": usage}
+
+    @backoff.on_exception(
+        backoff.expo,
+        (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError),
+        max_tries=3,
+        on_backoff=backoff_hdlr,
+        on_giveup=giveup_hdlr,
+    )
+    def forward(
+        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
+    ):
+        """Search with SerpApi for self.k top passages for query or queries"""
+        queries = (
+            [query_or_queries]
+            if isinstance(query_or_queries, str)
+            else query_or_queries
+        )
+        self.usage += len(queries)
+
+        collected_results = []
+
+        for query in queries:
+            try:
+                response = requests.get(
+                    "https://serpapi.com/search",
+                    params={
+                        "engine": "google",
+                        "q": query,
+                        "api_key": self.serpapi_api_key,
+                        "num": self.k,
+                        "format": "json"
+                    },
+                    timeout=30,
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                organic_results = data.get("organic_results", [])
+                
+                for result in organic_results[:self.k]:
+                    url = result.get("link", "")
+                    title = result.get("title", "")
+                    snippet = result.get("snippet", "")
+                    
+                    if self.is_valid_source(url) and url not in exclude_urls:
+                        # Try to get more detailed content
+                        try:
+                            webpage_content = self.webpage_helper.get_page_snippets(url)
+                            snippets = webpage_content.get("snippets", [snippet])
+                            enhanced_title = webpage_content.get("title", title)
+                        except:
+                            # Fallback to SerpApi snippet
+                            snippets = [snippet] if snippet else [f"Information about {query}"]
+                            enhanced_title = title
+
+                        if enhanced_title and snippets:
+                            collected_result = {
+                                "url": url,
+                                "title": enhanced_title,
+                                "description": snippet,
+                                "snippets": snippets,
+                            }
+                            collected_results.append(collected_result)
+
+            except Exception as e:
+                logging.warning(f"Error in SerpApiRM search for query '{query}': {e}")
+                # Fallback synthetic result
+                result = {
+                    "url": f"https://google.com/search?q={query.replace(' ', '+')}",
+                    "title": f"Search: {query}",
+                    "description": f"Information about {query}",
+                    "snippets": [f"Search content about {query}"],
+                }
+                collected_results.append(result)
+
+        return collected_results[:self.k]

@@ -14,8 +14,12 @@ from .workflows.academic import AcademicWorkflowRunner  # noqa: F401
 from .exceptions import ServiceUnavailableError  # noqa: F401
 try:
     from .storm_wiki import utils  # noqa: F401
+    from .storm_wiki import STORMWikiLMConfigs, STORMWikiRunner, STORMWikiRunnerArguments  # noqa: F401
 except ModuleNotFoundError:  # pragma: no cover
     utils = None
+    STORMWikiLMConfigs = None
+    STORMWikiRunner = None
+    STORMWikiRunnerArguments = None
 
 __all__ = [
     "lm",
@@ -26,4 +30,7 @@ __all__ = [
     "EnhancedSTORMEngine",
     "AcademicWorkflowRunner",
     "ServiceUnavailableError",
+    "STORMWikiLMConfigs",
+    "STORMWikiRunner",
+    "STORMWikiRunnerArguments",
 ]
