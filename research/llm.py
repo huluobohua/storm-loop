@@ -54,7 +54,7 @@ class OpenAIService(LLMService):
     def _extract_content(self, response: Dict) -> str:
         """Extract content from API response."""
         try:
-            return self._get_message_content(response)
+            return self._get_message_content(response)  
         except (KeyError, IndexError) as e:
             self._raise_format_error(e)
     
