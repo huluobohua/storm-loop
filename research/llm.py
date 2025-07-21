@@ -6,7 +6,7 @@ Secure API key handling, proper async I/O, comprehensive error handling.
 
 import aiohttp
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 from .interfaces import LLMService
 
 
@@ -34,11 +34,12 @@ class OpenAIService(LLMService):
     
     def _build_payload(self, prompt: str) -> Dict[str, Any]:
         """Build request payload."""
-        return {
-            'model': 'gpt-4o-mini',
-            'messages': [{'role': 'user', 'content': prompt}],
-            'max_tokens': 2000
-        }
+        messages = self._build_messages(prompt)
+        return {'model': 'gpt-4o-mini', 'messages': messages, 'max_tokens': 2000}
+    
+    def _build_messages(self, prompt: str) -> List[Dict[str, str]]:
+        """Build message array for API request."""
+        return [{'role': 'user', 'content': prompt}]
     
     async def _make_request(self, headers: Dict, payload: Dict) -> Dict:
         """Make secure HTTP request."""
@@ -53,7 +54,15 @@ class OpenAIService(LLMService):
     def _extract_content(self, response: Dict) -> str:
         """Extract content from API response."""
         try:
-            return response['choices'][0]['message']['content']
+            return self._get_message_content(response)
         except (KeyError, IndexError) as e:
-            from .exceptions import LLMServiceError
-            raise LLMServiceError(f"Invalid API response format: {e}")
+            self._raise_format_error(e)
+    
+    def _get_message_content(self, response: Dict) -> str:
+        """Get message content from response."""
+        return response['choices'][0]['message']['content']
+    
+    def _raise_format_error(self, error):
+        """Raise LLM service format error."""
+        from .exceptions import LLMServiceError
+        raise LLMServiceError(f"Invalid API response format: {error}")

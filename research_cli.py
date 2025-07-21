@@ -46,11 +46,16 @@ class ResearchCLI:
     
     def _prepare_output_files(self, topic: str, result: dict) -> dict:
         """Prepare files for output."""
+        text_files = self._prepare_text_files(result)
+        metadata = {"metadata.json": self._build_metadata(topic, result)}
+        return {**text_files, **metadata}
+    
+    def _prepare_text_files(self, result: dict) -> dict:
+        """Prepare text output files."""
         return {
             "queries.txt": "\n".join(result['queries']),
             "outline.txt": result['outline'],
-            "article.txt": result['polished_article'],
-            "metadata.json": self._build_metadata(topic, result)
+            "article.txt": result['polished_article']
         }
     
     def _write_all_files(self, topic_dir: str, files: dict):
@@ -79,21 +84,36 @@ class ResearchCLI:
     
     def _build_metadata(self, topic: str, result: dict) -> dict:
         """Build metadata for research."""
+        basic_info = {'topic': topic, 'generated_at': datetime.now().isoformat()}
+        counts = self._build_counts(result)
+        return {**basic_info, **counts}
+    
+    def _build_counts(self, result: dict) -> dict:
+        """Build count statistics."""
         return {
-            'topic': topic,
-            'generated_at': datetime.now().isoformat(),
             'queries_count': len(result['queries']),
             'sources_count': len(result['search_results'])
         }
     
     def _display_summary(self, result: dict, output_path: str):
         """Display research summary."""
+        self._print_completion_status(output_path)
+        self._print_statistics(result)
+    
+    def _print_completion_status(self, output_path: str):
+        """Print completion status."""
         print(f"✅ Research complete!")
         print(f"📁 Saved to: {output_path}")
+    
+    def _print_statistics(self, result: dict):
+        """Print research statistics."""
         print(f"📋 Queries: {len(result['queries'])}")
         print(f"🔍 Sources: {len(result['search_results'])}")
-        article_len = len(result['polished_article'])
-        words = len(result['polished_article'].split())
+        self._print_article_stats(result['polished_article'])
+    
+    def _print_article_stats(self, article: str):
+        """Print article statistics."""
+        article_len, words = len(article), len(article.split())
         print(f"📄 Article: {article_len} chars, {words} words")
 
 
@@ -146,10 +166,7 @@ async def _execute_research(topic: str, api_keys: tuple):
 def _create_config(api_keys: tuple) -> 'ResearchConfig':
     """Create research configuration from API keys."""
     search_key, llm_key = api_keys
-    return ResearchConfig(
-        search_api_key=search_key,
-        llm_api_key=llm_key
-    )
+    return ResearchConfig(search_api_key=search_key, llm_api_key=llm_key)
 
 def _handle_research_error(error: Exception):
     """Handle research execution errors."""

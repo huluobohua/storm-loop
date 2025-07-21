@@ -33,11 +33,9 @@ class SecureSearchEngine(SearchEngine):
     
     def _build_params(self, query: str) -> Dict[str, str]:
         """Build query parameters with API key (SerpApi requirement)."""
-        return {
-            'q': query,
-            'engine': 'google',
-            'api_key': self.api_key
-        }
+        base_params = {'q': query, 'engine': 'google'}
+        auth_params = {'api_key': self.api_key}
+        return {**base_params, **auth_params}
     
     async def _make_request(self, headers: Dict, params: Dict) -> Dict:
         """Make secure HTTP request with proper async."""
@@ -56,8 +54,6 @@ class SecureSearchEngine(SearchEngine):
     
     def _format_result(self, result: Dict) -> Dict[str, Any]:
         """Format individual search result."""
-        return {
-            'title': result.get('title', ''),
-            'url': result.get('url', ''),
-            'description': result.get('description', '')
-        }
+        basic_fields = {'title': result.get('title', ''), 'url': result.get('url', '')}
+        desc_field = {'description': result.get('description', '')}
+        return {**basic_fields, **desc_field}

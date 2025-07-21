@@ -16,9 +16,13 @@ class ResearchService:
                  search_engine: SearchEngine, 
                  content_processor: ContentProcessor):
         """Initialize with injected dependencies."""
-        self.query_generator = query_generator
-        self.search_engine = search_engine  
-        self.content_processor = content_processor
+        self._assign_dependencies(query_generator, search_engine, content_processor)
+    
+    def _assign_dependencies(self, query_gen, search_engine, content_proc):
+        """Assign injected dependencies to instance variables."""
+        self.query_generator = query_gen
+        self.search_engine = search_engine
+        self.content_processor = content_proc
     
     async def generate_research(self, topic: str) -> Dict[str, Any]:
         """Generate complete research report."""
